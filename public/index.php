@@ -65,10 +65,15 @@ try {
         $Queue[] = sendMaster(var_export($Event, true)."\n\n".var_export($Queue, true));
     }
 
-} catch (\Exception $e) {
-    if($e->getMessage()) {
+} catch (\Throwable $e) {
+    // 捕获真正的代码级错误并推送到开发群 (如TypeError, ParseError)
+    if ($e instanceof \Error) {
+        $errorMsg = "Bot运行时异常：\n" . get_class($e) . ": " . $e->getMessage() . "\n文件: " . $e->getFile() . " (" . $e->getLine() . ")";
+        $Queue[] = sendDevGroup($errorMsg);
+        $Queue[] = replyMessage("系统内部发生错误，已报告给开发者。", false, true);
+        setData('error.log', date('Y-m-d H:i:s') . "\n" . $e->getTraceAsString() . "\n\n", true);
+    } else if ($e->getMessage()) {
         if(preg_match('/\[CQ:reply,id=(-?\d+?)\]/', $e->getMessage())) {
-            $Queue[] = sendBack($e->getMessage(), false, true);
         } else {
             $Queue[] = replyMessage($e->getMessage(), false, true);
         }
@@ -82,7 +87,7 @@ try {
             $MsgSender->send($msg);
         }
     }
-} catch (\Exception $e) {
+} catch (\Throwable $e) {
     if($e->getCode() == -11) {
         try {
             $MsgSender0->send($msg);
