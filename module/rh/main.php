@@ -4,12 +4,20 @@
 function le(string $str, bool $endGame = true, bool $reply = false) {
     global $Event;
     $rhData = json_decode(getData('rh/group/'.$Event['group_id']), true);
-    if($endGame) {
+
+    date_default_timezone_set("Asia/Shanghai");
+    $isNightSession = (date('H') < 5 || date('H') > 22);
+    $cdTime = $isNightSession ? 12 * 60 : 7.5 * 60; // 晚间场冷却惩罚
+
+    if($endGame && is_array($rhData) && isset($rhData['players'])) {
         foreach($rhData['players'] as $player) {
-            coolDown('rh/user/'.$player, 7.5 * 60);
+            coolDown('rh/user/'.$player, $cdTime);
             unlockHorse($player);
         }
-        coolDown('rh/group/'.$Event['group_id'], 7.5 * 60);
+        coolDown('rh/group/'.$Event['group_id'], $cdTime);
+        if($isNightSession) {
+            $str .= "\n\n【晚间场提醒】夜深人静，为了保护赛马场生态，本次赛后将进入 12 分钟的加长休息期哦～";
+        }
     }
     delData('rh/group/'.$Event['group_id']);
 
