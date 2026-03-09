@@ -7,6 +7,10 @@ if(!(preg_match('/\d+/', $QQ, $match) && $match[0] == $QQ)){
     $QQ = parseQQ($QQ);
 }
 
+if($QQ == config('master')) {
+    replyAndLeave($QQ.' 的权限为 Master ~');
+}
+
 $list = json_decode(getData('usertype.json'),true);
 foreach($list as $type => $users)
 	foreach($users as $user)
