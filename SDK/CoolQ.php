@@ -441,15 +441,38 @@ class CoolQ {
 
     private function query($api, $param) {
         $param['access_token'] = $this->token;
+        $json_payload = json_encode($param);
         $options = [
             'http' => [
                 'method' => 'POST',
-                'header' => 'Content-Type: application/json',
-                'content' => json_encode($param),
+                'header' => "Content-Type: application/json\r\nAuthorization: Bearer " . $this->token . "\r\n",
+                'content' => $json_payload,
+                'ignore_errors' => true,
             ],
         ];
         $context = stream_context_create($options);
-        $result = json_decode(file_get_contents('http://'.$this->host.$api, false, $context));
+        
+        $url = 'http://'.$this->host.$api;
+        
+        error_clear_last();
+        $response = @file_get_contents($url, false, $context);
+        $last_error = error_get_last();
+        
+        // 增加调试记录机制，写入到 storage/data 方便排错
+        $log_file = dirname(__DIR__, 1) . '/storage/data/http_debug.log';
+        $log_data = sprintf(
+            "[%s] API: %s\nPayload: %s\nResponse: %s\nError: %s\nHeaders: %s\n---\n",
+            date('Y-m-d H:i:s'),
+            $url,
+            $json_payload,
+            var_export($response, true),
+            var_export($last_error, true),
+            var_export($http_response_header ?? null, true)
+        );
+        @file_put_contents($log_file, $log_data, FILE_APPEND);
+
+        $result = json_decode($response);
+        if (!$result || !isset($result->retcode)) return null;
 
         switch($result->retcode) {
             case 0:

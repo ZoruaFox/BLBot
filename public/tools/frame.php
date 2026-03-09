@@ -325,6 +325,7 @@ function pd() {
 function requireLvl($lvl = 0, $msg = '本指令', $resolve = null) {
     global $Event;
     loadModule('exp.tools');
+    if (isMaster()) return; // 主人无视等级限制
     if(intval(getLvl($Event['user_id'])) < $lvl) {
         throw new LvlLowException($lvl, getLvl($Event['user_id']), $msg, $resolve);
     }
