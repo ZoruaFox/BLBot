@@ -90,9 +90,10 @@ function initGame() {
 
     // 检查时间
     date_default_timezone_set("Asia/Shanghai");
-    if(date('H') < 5 || date('H') > 22) {
-        le('赛马场不在营业时间，关门休息啦…', false, true);
-    }
+    $isNightSession = (date('H') < 5 || date('H') > 22);
+    // if(date('H') < 5 || date('H') > 22) {
+    //     le('赛马场不在营业时间，关门休息啦…', false, true);
+    // }
     // if(date('w') != '3' && date('w') != '6' && date('w') != '0'){
     //     le('新赛马场逢周三、周六日运营哦～', false, true);
     // }
@@ -164,7 +165,8 @@ function initGame() {
 
     $reaction = preg_match('/^\[CQ:face,id=(\d+)\]$/', $assets['h'], $match) ? $match[1] : '424';
     $CQ->setGroupReaction($Event['group_id'], $Event['message_id'], $reaction);
-    re('[CQ:reply,id='.$Event['message_id'].']已发起赛'.$assets['h'].'，发送“赛'.$assets['h']."”或指令 #rh 即可加入～\n赛".$assets['h']."将于一分钟后开始哦～");
+    $nightMsg = $isNightSession ? "【晚间场】Bro赛马的热情这么晚了都十分高涨\n" : "";
+    re('[CQ:reply,id='.$Event['message_id'].']已发起赛'.$assets['h'].'，发送“赛'.$assets['h']."”或指令 #rh 即可加入～\n".$nightMsg."赛".$assets['h']."将于一分钟后开始哦～");
     countDownGame(0);
 }
 
@@ -285,6 +287,8 @@ function startGame($rhData): never {
                     '被xxs气活了',
                     '使用不死图腾复活了',
                     '睡醒了',
+                    '被丁真骑回了赛'.$assets['h'].'场',
+                    '出了一个名刀司命',
                 ]);
             } else {
                 // 诈尸 50%（消失马 0%）
@@ -307,6 +311,7 @@ function startGame($rhData): never {
                     '克服阻力做功，功率为μmgv',
                     '围绕赛'.$assets['h'].'场作匀速圆周运动，摩擦力≈mv²/r',
                     '没开满核定，摇车了',
+                    '正在看尽长安花',
                 ]);
             } else if($determination <= 700) {
                 // 走一大步 30%
@@ -398,6 +403,7 @@ function startGame($rhData): never {
                         '被萨卡兹枯朽吞噬者吞噬了',
                         '拍 999318 被抓了',
                         '被鹰角网络的龙卷风刮跑了',
+                        '被抓去拍千星奇域了',
                     ]);
                 } else {
                     // 自己作大死 10%
