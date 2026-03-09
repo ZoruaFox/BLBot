@@ -69,8 +69,9 @@ switch($status) {
         $msg .= "\n你被外星人{$randomParts}了。";
         break;
     case 'free':
-        $lastCheckinTime = filemtime('../storage/data/checkin/'.$QQ);
-        if(intval(date('Ymd')) - intval(date('Ymd', $lastCheckinTime)) > 0) {
+        $checkinFilePath = '../storage/data/checkin/'.$QQ;
+        $lastCheckinTime = file_exists($checkinFilePath) ? filemtime($checkinFilePath) : 0;
+        if($lastCheckinTime == 0 || intval(date('Ymd')) - intval(date('Ymd', $lastCheckinTime)) > 0) {
             $msg .= "\n今天还没有签到哦～";
         }
     default: break;

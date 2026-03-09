@@ -20,7 +20,6 @@ $time = date('H:i:s', $datetime);
 $trains = getCache("gdcj/{$date}/trains.json");
 $stations = getCache("gdcj/{$date}/stations.json");
 if(!$trains || !$stations) {
-    mkdir(getCachePath("gdcj/{$date}"));
     $trains = file_get_contents("https://guangdong-intercity-data.bobliu.tech/{$date}/trains.json");
     $stations = file_get_contents("https://guangdong-intercity-data.bobliu.tech/{$date}/stations.json");
     setCache("gdcj/{$date}/trains.json", $trains);

@@ -61,7 +61,9 @@ switch(getStatus($Event['user_id'])){
 			$message = '越狱失败了，';
 			if(rand(1, 100) <= $jrrp){
 				// 罚款
-				$fine = rand(30000, 60000);
+				$fineMin = (int)config('escapeFineMin', '30000');
+				$fineMax = (int)config('escapeFineMax', '60000');
+				$fine = rand($fineMin, $fineMax);
 				decCredit($Event['user_id'], $fine, true);
 				$message .= '你被罚款 '.$fine.' 金币';
 			}else{

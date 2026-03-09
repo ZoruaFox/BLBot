@@ -22,12 +22,12 @@ if(!function_exists('getLvl')) {
 
     function getLvlMap() {
         return [
-            ['lvl' => 6, 'exp' => 999999999],
-            ['lvl' => 5, 'exp' => 365],
-            ['lvl' => 4, 'exp' => 120],
-            ['lvl' => 3, 'exp' => 15],
-            ['lvl' => 2, 'exp' => 7],
-            ['lvl' => 1, 'exp' => 1],
+            ['lvl' => 6, 'exp' => (int)config('lv6Exp', '999999999')],
+            ['lvl' => 5, 'exp' => (int)config('lv5Exp', '365')],
+            ['lvl' => 4, 'exp' => (int)config('lv4Exp', '120')],
+            ['lvl' => 3, 'exp' => (int)config('lv3Exp', '15')],
+            ['lvl' => 2, 'exp' => (int)config('lv2Exp', '7')],
+            ['lvl' => 1, 'exp' => (int)config('lv1Exp', '1')],
             ['lvl' => 0, 'exp' => 0],
             ['lvl' => -1, 'exp' => -INF],
         ];

@@ -103,6 +103,9 @@ function sendDevGroup(string $msg, bool $auto_escape = false, bool $async = fals
  * @return mixed string|false
  */
 function setData(string $filePath, $data, bool $pending = false) {
+    if(!is_dir(dirname('../storage/data/'.$filePath))) {
+        @mkdir(dirname('../storage/data/'.$filePath), 0777, true);
+    }
     return file_put_contents('../storage/data/'.$filePath, $data, $pending ? (FILE_APPEND | LOCK_EX) : LOCK_EX);
 }
 
@@ -116,6 +119,7 @@ function delData(string $filePath) {
  * @return mixed string|false
  */
 function getData(string $filePath) {
+    if(!file_exists('../storage/data/'.$filePath)) return false;
     return file_get_contents('../storage/data/'.$filePath);
 }
 
@@ -135,6 +139,9 @@ function getDataFolderContents(string $folderPath) {
  * @return mixed string|false
  */
 function setCache(string $cacheFileName, $cache) {
+    if(!is_dir(dirname('../storage/cache/'.$cacheFileName))) {
+        @mkdir(dirname('../storage/cache/'.$cacheFileName), 0777, true);
+    }
     return file_put_contents('../storage/cache/'.$cacheFileName, $cache, LOCK_EX);
 }
 
@@ -148,6 +155,7 @@ function delCache(string $filePath) {
  * @return mixed string|false
  */
 function getCache($cacheFileName) {
+    if(!file_exists('../storage/cache/'.$cacheFileName)) return false;
     return file_get_contents('../storage/cache/'.$cacheFileName);
 }
 
@@ -450,7 +458,9 @@ function coolDown(string $name, $time = null): int {
     global $Event;
     if(null === $time) {
         clearstatcache();
-        return time() - filemtime("../storage/data/coolDown/{$name}") - (int)getData("coolDown/{$name}");
+        $coolDownFile = "../storage/data/coolDown/{$name}";
+        $fileTime = file_exists($coolDownFile) ? filemtime($coolDownFile) : 0;
+        return time() - $fileTime - (int)getData("coolDown/{$name}");
     } else {
         setData("coolDown/{$name}", $time);
         return -$time;

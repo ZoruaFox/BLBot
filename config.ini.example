@@ -27,3 +27,29 @@ DebugListen=
 Listen=-1
 ;是否开启一些功能
 alias=true
+
+;==== 经济与数值配置 ====
+;签到每日获得的经验值
+checkinExp=1
+;存款低于100万时的签到金币底数与上限
+checkinLowIncomeMin=10000
+checkinLowIncomeMax=100000
+;存款大于等于1000万时的签到金币底数与上限
+checkinHighIncomeMin=1000
+checkinHighIncomeMax=10000
+;被外星人抓走的冻结时间(秒)
+abductionDuration=86400
+
+;升级所需的经验值
+lv1Exp=1
+lv2Exp=7
+lv3Exp=15
+lv4Exp=120
+lv5Exp=365
+lv6Exp=999999999
+
+;越狱产生的保释金范围
+escapeFineMin=30000
+escapeFineMax=60000
+;假签到的触发概率，概率为 1/x (默认200000)
+fakeCheckinProb=200000

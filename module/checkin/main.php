@@ -39,19 +39,25 @@ switch(getStatus($User_id)) {
     default:
         $credit = getCredit($User_id);
 
+        $lowMin = (int)config('checkinLowIncomeMin', '10000');
+        $lowMax = (int)config('checkinLowIncomeMax', '100000');
+        $highMin = (int)config('checkinHighIncomeMin', '1000');
+        $highMax = (int)config('checkinHighIncomeMax', '10000');
+
         if($credit < 1000000) {
-            $income = rand(10000, 100000);
+            $income = rand($lowMin, $lowMax);
         } else if($credit < 10000000) {
-            $income = rand(ceil(10000 - ($credit - 1000000) * 0.001), ceil(100000 - ($credit - 1000000) * 0.001));
+            $income = rand(ceil($lowMin - ($credit - 1000000) * 0.001), ceil($lowMax - ($credit - 1000000) * 0.001));
         } else {
-            $income = rand(1000, 10000);
+            $income = rand($highMin, $highMax);
         }
         $income = floor(1 + $income * getRp($Event['user_id']) / 50);
         $originLvl = getLvl($Event['user_id']);
 
         clearstatcache();
-        $lastCheckinTime = filemtime('../storage/data/checkin/'.$Event['user_id']);
-        if(0 == (int)date('Ymd') - (int)date('Ymd', $lastCheckinTime)) {
+        $checkinFilePath = '../storage/data/checkin/'.$Event['user_id'];
+        $lastCheckinTime = file_exists($checkinFilePath) ? filemtime($checkinFilePath) : 0;
+        if($lastCheckinTime > 0 && 0 == (int)date('Ymd') - (int)date('Ymd', $lastCheckinTime)) {
             $replys = [
                 "你今天{$word}过了！（震声",
                 "{$word}过了www",
@@ -102,14 +108,16 @@ switch(getStatus($User_id)) {
             if(rand(1, 100) <= $abductionProbability) {
                 $data = getAttackData($Event['user_id']);
                 $data['status'] = 'saucer';
-                $data['end'] = date('Ymd', time() + 86400); // 1 day
+                $abductionDuration = (int)config('abductionDuration', '86400');
+                $data['end'] = date('Ymd', time() + $abductionDuration);
                 $reply = '🛸天空上突然出现了一台飞碟，你被外星人抓走了…';
                 $CQ->setGroupReaction($Event['group_id'], $Event['message_id'], '326');
                 setAttackData($Event['user_id'], $data);
             } else {
                 addCredit($Event['user_id'], $income);
-                addExp($Event['user_id'], 1);
-                $reply = "{$word}成功，获得 {$income} 金币，1 经验～";
+                $checkinExp = (int)config('checkinExp', '1');
+                addExp($Event['user_id'], $checkinExp);
+                $reply = "{$word}成功，获得 {$income} 金币，{$checkinExp} 经验～";
                 if(getLvl($Event['user_id']) > $originLvl) {
                     $reply .= "\n恭喜升级 Lv".getLvl($Event['user_id']).' 啦～';
                 } else {
