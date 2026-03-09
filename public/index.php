@@ -78,7 +78,9 @@ try {
 try {
     //将队列中的消息发出
     foreach($Queue as $msg) {
-        $MsgSender->send($msg);
+        if($msg !== null) {
+            $MsgSender->send($msg);
+        }
     }
 } catch (\Exception $e) {
     if($e->getCode() == -11) {
