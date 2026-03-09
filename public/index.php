@@ -74,6 +74,7 @@ try {
         setData('error.log', date('Y-m-d H:i:s') . "\n" . $e->getTraceAsString() . "\n\n", true);
     } else if ($e->getMessage()) {
         if(preg_match('/\[CQ:reply,id=(-?\d+?)\]/', $e->getMessage())) {
+            $Queue[] = sendBack($e->getMessage(), false, true);
         } else {
             $Queue[] = replyMessage($e->getMessage(), false, true);
         }
