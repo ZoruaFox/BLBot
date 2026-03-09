@@ -229,19 +229,32 @@ $draw->annotation(($imageWidth - $titleWidth) / 2, 80, $title);
 
 // 生成图片
 $image->extentImage($imageWidth, $currentY + 100, 0, 0);
-$path = realpath(getCachePath('schedule'))."/{$Event['group_id']}.png";
+$cacheDir = getCachePath('schedule');
+if(!is_dir($cacheDir)) @mkdir($cacheDir, 0777, true);
+$path = realpath($cacheDir)."/{$Event['group_id']}.png";
 $image->drawImage($draw);
 $image->writeImage($path);
 
+// 直接将本地图片转为 Base64 流，完美绕过不在同一台服务器的 URL 及目录获取问题
+$imageData = file_get_contents($path);
+$base64Image = 'base64://' . base64_encode($imageData);
+
 $retry = 0;
 $CQ->setGroupReaction($Event['group_id'], $Event['message_id'], '351', false);
-$ret = $CQ->sendGroupMsg($Event['group_id'], "[CQ:reply,id={$Event['message_id']}][CQ:image,file=file://{$path}]");
+
+// 使用 base64 格式喂给 OneBot 发图
+$ret = $CQ->sendGroupMsg($Event['group_id'], "[CQ:reply,id={$Event['message_id']}][CQ:image,file={$base64Image}]");
 
 while(!$ret && $retry <= 3) {
     $retry++;
     $image->rotateImage(new ImagickPixel('white'), $retry == 2 ? 90 : 180);
     $image->writeImage($path);
-    $ret = $CQ->sendGroupMsg($Event['group_id'], "[CQ:reply,id={$Event['message_id']}][CQ:image,file=file://{$path}]Origin message intercepted by Tencent, rotated.");
+    
+    // 旋转后的图片也要重新获取 base64
+    $imageData = file_get_contents($path);
+    $base64Image = 'base64://' . base64_encode($imageData);
+    
+    $ret = $CQ->sendGroupMsg($Event['group_id'], "[CQ:reply,id={$Event['message_id']}][CQ:image,file={$base64Image}]Origin message intercepted by Tencent, rotated.");
 }
 
 if(!$ret) {
