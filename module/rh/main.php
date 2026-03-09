@@ -7,7 +7,7 @@ function le(string $str, bool $endGame = true, bool $reply = false) {
 
     date_default_timezone_set("Asia/Shanghai");
     $isNightSession = (date('H') < 5 || date('H') > 22);
-    $cdTime = $isNightSession ? 12 * 60 : 7.5 * 60; // 晚间场冷却惩罚
+    $cdTime = $isNightSession ? 15 * 60 : 7.5 * 60; // 晚间场冷却惩罚
 
     if($endGame && is_array($rhData) && isset($rhData['players'])) {
         foreach($rhData['players'] as $player) {
@@ -16,7 +16,7 @@ function le(string $str, bool $endGame = true, bool $reply = false) {
         }
         coolDown('rh/group/'.$Event['group_id'], $cdTime);
         if($isNightSession) {
-            $str .= "\n\n【晚间场提醒】夜深人静，为了保护赛马场生态，本次赛后将进入 12 分钟的加长休息期哦～";
+            $str .= "\n\n【晚间场提醒】马需要更长的时间休息，请骑手注意不要疲劳驾驶";
         }
     }
     delData('rh/group/'.$Event['group_id']);
