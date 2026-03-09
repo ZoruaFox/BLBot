@@ -53,3 +53,14 @@ escapeFineMin=30000
 escapeFineMax=60000
 ;假签到的触发概率，概率为 1/x (默认200000)
 fakeCheckinProb=200000
+
+;==== 黑白名单配置 ====
+; 以下均使用半角逗号分隔多个QQ号或群号，例如 "111,222,333"
+
+;群聊名单模式，可选 none (关闭), blacklist (黑名单), whitelist (白名单)
+groupListMode=none
+groupListGroups=""
+
+;用户名单模式，可选 none (关闭), blacklist (黑名单), whitelist (白名单)
+userListMode=none
+userListUsers=""

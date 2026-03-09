@@ -8,12 +8,45 @@ use kjBot\Frame\Message;
 
 try {
     $listen = config('Listen');
-    $whiteList = json_decode(getData('whitelist.json'), true)['groups'];
-    if($whiteList && !in_array($Event['group_id'], $whiteList) && $Event['group_id'] != null) {
+    $whiteListJson = getData('whitelist.json');
+    $whiteList = $whiteListJson ? json_decode($whiteListJson, true)['groups'] : null;
+    if($whiteList && !in_array($Event['group_id'], $whiteList) && isset($Event['group_id'])) {
         $Queue[] = sendMaster('No access at '.$Event['group_id']);
         $Queue[] = sendDevGroup('No access at '.$Event['group_id']);
         $CQ->setGroupLeave($Event['group_id']);
         exit();
+    }
+
+    // 处理用户黑白名单 (来自 config.ini)
+    $userListMode = config('userListMode', 'none');
+    if($userListMode !== 'none' && isset($Event['user_id'])) {
+        $usersStr = config('userListUsers', '');
+        $uList = $usersStr === '' ? [] : array_map('trim', explode(',', $usersStr));
+        if($userListMode === 'blacklist' && in_array((string)$Event['user_id'], $uList)) {
+            exit(); // 黑名单用户直接丢弃
+        }
+        if($userListMode === 'whitelist' && !in_array((string)$Event['user_id'], $uList)) {
+            // 除了master也作为白名单的一员，但如果有明确报错的话
+            $master = config('master', '');
+            if($Event['user_id'] != $master) {
+                exit();
+            }
+        }
+    }
+
+    // 处理群聊黑白名单 (来自 config.ini)，兼容旧版 whitelist.json
+    $groupListMode = config('groupListMode', 'none');
+    if($groupListMode !== 'none' && isset($Event['group_id'])) {
+        $groupsStr = config('groupListGroups', '');
+        $gList = $groupsStr === '' ? [] : array_map('trim', explode(',', $groupsStr));
+        if($groupListMode === 'blacklist' && in_array((string)$Event['group_id'], $gList)) {
+            exit(); // 如果是黑名单则不要响应
+        }
+        if($groupListMode === 'whitelist' && !in_array((string)$Event['group_id'], $gList)) {
+            // 如果是白名单，且不在白名单内，也可以向原版一样退群
+            // 但用户可能只指不想响应，所以这里简单 exit 处理
+            exit();
+        }
     }
 
     switch($Event['post_type']) {
