@@ -28,17 +28,25 @@ if($target !== $master) {
     replyAndLeave("你尝试拿出一些钱给狱友，但是什么事也没有发生。");
 }
 
+$minBribe = (int)config('mysticBribeMinAmount', 20000);
+$maxBribe = (int)config('mysticBribeMaxAmount', 100000);
+
 $amount = (int)nextArg();
-if ($amount < 20000) {
-    replyAndLeave("“你尝试拿出一些钱，但是什么事也没有发生。");
+if ($amount < $minBribe) {
+    replyAndLeave("你尝试拿出一些钱，但是什么事也没有发生。");
 }
 
 if (getCredit($Event['user_id']) < $amount) {
     replyAndLeave('你好像并没有这么多钱哦…');
 }
 
-// probability math: 20000 -> 5%, 100000 -> 100%
-$rate = 5 + ($amount - 20000) / 80000 * 95;
+// probability math: min -> 5%, max -> 100%
+$rateRange = $maxBribe - $minBribe;
+if ($rateRange > 0) {
+    $rate = 5 + ($amount - $minBribe) / $rateRange * 95;
+} else {
+    $rate = 100;
+}
 if ($rate > 100) $rate = 100;
 
 $rand = rand(1, 10000) / 100; // 0.01 to 100.00
@@ -53,5 +61,5 @@ if ($success) {
     replyAndLeave("你把 {$amount} 金币塞进了门缝。牢房门被神秘的力量“咔嗒”一声打开了，你现在自由了！");
 } else {
     decCredit($Event['user_id'], $amount, true);
-    replyAndLeave("你把 {$amount} 金币塞进了门缝，随着金币消失，什么也没有发生”\n损失了 {$amount} 金币，好在没有发送其他的事情。");
+    replyAndLeave("你把 {$amount} 金币塞进了门缝，随着金币消失，什么也没有发生。\n损失了 {$amount} 金币，好在没有发生其他的事情。");
 }

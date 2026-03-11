@@ -105,7 +105,7 @@ function performFreeStatusAttack(&$data, $from, $target, $atTarget, $magnificati
 	$targetIsMaster = ($target == config('master'));
 
 	if ($targetIsMaster) {
-		$successRate = (int)config('wardenAttackSuccessRate', 5);
+		$successRate = (int)config('mysticAttackSuccessRate', 5);
 	} else {
 		$successRate = $data['count']['times'] > 3 ? 40 : (10 + $data['count']['times'] * 10);
 	}
@@ -120,8 +120,8 @@ function performFreeStatusAttack(&$data, $from, $target, $atTarget, $magnificati
 	}
 	
 	if ($targetIsMaster && $success) {
-		$minReward = (int)config('wardenAttackRewardMin', 150000);
-		$maxReward = (int)config('wardenAttackRewardMax', 400000);
+		$minReward = (int)config('mysticAttackRewardMin', 150000);
+		$maxReward = (int)config('mysticAttackRewardMax', 400000);
 		$getMoney = rand($minReward, $maxReward);
 	} else {
 		$getMoney = ceil((getLvl($from) - getLvl($target) + 10) * (getRp($from, time()) - getRp($target, time()) + 100) * rand(ceil(100 * $magnification), ceil(1000 * $magnification)) / 200 + 1);

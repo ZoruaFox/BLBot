@@ -74,17 +74,17 @@ attackFailedEventChance=4
 ;群管理修改打劫倍率的冷却时间(秒)，默认3天=259200秒
 attackConfigCooldown=259200
 
-;==== 典狱长系统配置 ====
-;打劫典狱长的基础成功率(%)
-wardenAttackSuccessRate=5
-;打劫典狱长成功的最低奖励
-wardenAttackRewardMin=150000
-;打劫典狱长成功的最高奖励
-wardenAttackRewardMax=400000
-;向典狱长行贿的最低金币要求
-wardenBribeMinAmount=20000
-;必能出狱的行贿金币数（达到此值100%出狱，中间概率线性递增）
-wardenBribeMaxAmount=100000
+;==== 神秘力量系统配置 ====
+;打劫神秘人的基础成功率(%)
+mysticAttackSuccessRate=5
+;打劫神秘人成功的最低奖励
+mysticAttackRewardMin=150000
+;打劫神秘人成功的最高奖励
+mysticAttackRewardMax=400000
+;向神秘力量奉献的最低金币要求
+mysticBribeMinAmount=20000
+;必能出狱的奉献金币数（达到此值100%出狱，中间概率线性递增）
+mysticBribeMaxAmount=100000
 
 ;==== 黑白名单配置 ====
 ; 以下均使用半角逗号分隔多个QQ号或群号，例如 "111,222,333"
