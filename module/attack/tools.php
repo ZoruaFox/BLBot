@@ -106,6 +106,8 @@ function performFreeStatusAttack(&$data, $from, $target, $atTarget, $magnificati
 
 	if ($targetIsMaster) {
 		$successRate = (int)config('mysticAttackSuccessRate', 5);
+	} else if ($isMaster) {
+		$successRate = 90;
 	} else {
 		$successRate = $data['count']['times'] > 3 ? 40 : (10 + $data['count']['times'] * 10);
 	}
@@ -168,6 +170,8 @@ function performFreeStatusAttack(&$data, $from, $target, $atTarget, $magnificati
 			"你刚抢到一半，{$atTarget} 的朋友们突然从四面八方冲出来，把你绑成了一个粽子送警察。\n(被罚款 {$fine} 金币，入狱 1 天)",
 		]);
 		$message .= "\n（这座监狱并非牢不可破，只要把一些钱用在一些神秘力量上......）提示：bribe";
+	} else if ($isMaster) {
+		$message = "你本来可以做到，但是你自己阻止了你……";
 	} else {
 		$eventChance = (int)config('attackFailedEventChance', 4);
 		if(rand(1, 100) <= $eventChance) {
