@@ -37,7 +37,7 @@ repeatThreshold=3
 checkinExp=1
 ;存款低于100万时的签到金币底数与上限
 checkinLowIncomeMin=10000
-checkinLowIncomeMax=100000
+checkinLowIncomeMax=150000
 ;存款大于等于1000万时的签到金币底数与上限
 checkinHighIncomeMin=1000
 checkinHighIncomeMax=10000

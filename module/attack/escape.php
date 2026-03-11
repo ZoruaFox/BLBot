@@ -52,7 +52,7 @@ switch(getStatus($Event['user_id'])){
 			$data['status'] = 'hospitalized';
 			$data['end'] = date('Ymd', time() + 86400);
 			decCredit($Event['user_id'], $hospitalCost, true);
-		}else if(rand(1, 100) <= 50 + 0.5 * $jrrp){
+		}else if(rand(1, 100) <= 0.5 * $jrrp){
 			// 越狱成功
 			$message = '趁狱警不注意，你成功溜了出来。';
 			$data['status'] = 'free';
