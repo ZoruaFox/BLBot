@@ -58,6 +58,34 @@ escapeFineMax=60000
 ;假签到的触发概率，概率为 1/x (默认200000)
 fakeCheckinProb=200000
 
+;==== 打劫与越狱数值配置 ====
+;打劫目标必须在多少天内有群内发言记录
+attackInactiveDays=3
+;被警察抓住的基础罚款金额（受群倍率影响）
+attackBaseFine=500
+;打劫失败导致住院及对方获得赔偿的金币数目
+attackHospitalCost=10000
+;打劫蹲点没蹲到的跨城车费金额
+attackFailBusFare=200
+;越狱失败重伤的手术费用
+escapeHospitalCost=20000
+;打劫失败触发特殊事件（如住院、异世界等）的百分比概率
+attackFailedEventChance=4
+;群管理修改打劫倍率的冷却时间(秒)，默认3天=259200秒
+attackConfigCooldown=259200
+
+;==== 典狱长系统配置 ====
+;打劫典狱长的基础成功率(%)
+wardenAttackSuccessRate=5
+;打劫典狱长成功的最低奖励
+wardenAttackRewardMin=150000
+;打劫典狱长成功的最高奖励
+wardenAttackRewardMax=400000
+;向典狱长行贿的最低金币要求
+wardenBribeMinAmount=20000
+;必能出狱的行贿金币数（达到此值100%出狱，中间概率线性递增）
+wardenBribeMaxAmount=100000
+
 ;==== 黑白名单配置 ====
 ; 以下均使用半角逗号分隔多个QQ号或群号，例如 "111,222,333"
 

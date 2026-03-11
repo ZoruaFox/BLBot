@@ -39,17 +39,19 @@ switch(getStatus($Event['user_id'])){
 		break;
 	case 'imprisoned':
 	case 'confined':
-		if($data['escape']['date'] == date('Ymd') && $data['escape']['times'] > 0){
+		$isMaster = ($Event['user_id'] == config('master'));
+		if(!$isMaster && $data['escape']['date'] == date('Ymd') && $data['escape']['times'] > 0){
 			replyAndLeave('你今天喜提狱警特别关照，别试了，没用的，洗洗睡吧。');
 		}
 		$data['escape']['date'] = date('Ymd');
 		$data['escape']['times'] += 1;
 		if(rand(1, 100) <= 2){
 			// 进医院
-			$message = '越狱时你感到一阵刺痛，等你醒来时已经元气大伤，躺在了手术台上。(支付 20000 金币手术费)';
+			$hospitalCost = (int)config('escapeHospitalCost', 20000);
+			$message = "越狱时你感到一阵刺痛，等你醒来时已经元气大伤，躺在了手术台上。(支付 {$hospitalCost} 金币手术费)";
 			$data['status'] = 'hospitalized';
 			$data['end'] = date('Ymd', time() + 86400);
-			decCredit($Event['user_id'], 20000, true);
+			decCredit($Event['user_id'], $hospitalCost, true);
 		}else if(rand(1, 100) <= 50 + 0.5 * $jrrp){
 			// 越狱成功
 			$message = '趁狱警不注意，你成功溜了出来。';

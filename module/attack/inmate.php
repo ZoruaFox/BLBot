@@ -23,6 +23,7 @@ if(count($inmates)){
 	foreach($inmates as $inmate){
 		$reply .= "\n@".$inmate['nickname']."\n　刑期至：".$inmate['end'];
 	}
+	$reply .= "\n\n（据说这座监狱并非牢不可破……）";
 	replyAndLeave($reply);
 }else{
 	replyAndLeave('群监狱现在没有人哦…');

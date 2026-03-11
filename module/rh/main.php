@@ -111,6 +111,13 @@ function initGame() {
         le('你的'.$assets['h'].'现在在别的赛'.$assets['h'].'场哦？', false, true);
     }
 
+    // 检查金币是否足够
+    $entryFee = 2000;
+    loadModule('credit.tools');
+    if(getCredit($Event['user_id']) < $entryFee) {
+        le('你没有足够的金币发起赛'.$assets['h'].'哦（需要 '.$entryFee.' 金币）～', false, true);
+    }
+
     // 检查cd
     if(coolDown("rh/group/".$Event['group_id']) < 0) {
         $time = -coolDown("rh/group/".$Event['group_id']);
@@ -123,6 +130,7 @@ function initGame() {
 
     // 锁定马
     lockHorse($Event['user_id']);
+    decCredit($Event['user_id'], $entryFee);
 
     // 50% 概率出现奇怪的马
     $determination = rand(1, 100);
@@ -207,15 +215,20 @@ function joinGame() {
         replyAndLeave('你的'.$horse.'正在休息，大约还需要'.(((intval($time / 60) > 0) ? (intval($time / 60).'分') : '')).((($time % 60) > 0) ? ($time % 60).'秒' : '钟').'～');
     }
 
+    $entryFee = 2000;
+    if(getCredit($Event['user_id']) < $entryFee) {
+        replyAndLeave('你没有足够的金币加入赛'.$horse.'哦（需要 '.$entryFee.' 金币）～');
+    }
+
     lockHorse($Event['user_id']);
-    decCredit($Event['user_id'], 1000);
+    decCredit($Event['user_id'], $entryFee);
 
     $rhData['players'][] = $Event['user_id'];
     setData('rh/group/'.$Event['group_id'], json_encode($rhData));
 
     $reaction = preg_match('/^\[CQ:face,id=(\d+)\]$/', $horse, $match) ? $match[1] : '424';
     $CQ->setGroupReaction($Event['group_id'], $Event['message_id'], $reaction);
-    replyAndLeave('加入赛'.$horse."成功，消耗了1000金币～\n现在赛".$horse.'场有'.count($rhData['players']).'匹'.$horse.'了～'.(json_decode(getData('rh/user/'.$Event['user_id']), true)['nickname'] ? '' : "\n现在可以使用 #rh.nickname 设置昵称了，快试试吧~"));
+    replyAndLeave('加入赛'.$horse."成功，消耗了 ".$entryFee." 金币～\n现在赛".$horse.'场有'.count($rhData['players']).'匹'.$horse.'了～'.(json_decode(getData('rh/user/'.$Event['user_id']), true)['nickname'] ? '' : "\n现在可以使用 #rh.nickname 设置昵称了，快试试吧~"));
 }
 
 // 开始前的倒计时
