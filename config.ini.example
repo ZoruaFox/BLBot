@@ -81,10 +81,18 @@ mysticAttackSuccessRate=5
 mysticAttackRewardMin=150000
 ;打劫神秘人成功的最高奖励
 mysticAttackRewardMax=400000
-;向神秘力量奉献的最低金币要求
-mysticBribeMinAmount=20000
-;必能出狱的奉献金币数（达到此值100%出狱，中间概率线性递增）
-mysticBribeMaxAmount=100000
+;向神秘力量奉献的最低金币要求(监狱与禁闭室)
+mysticPrisonBribeMinAmount=20000
+;必能逃脱的奉献金币数(监狱与禁闭室)
+mysticPrisonBribeMaxAmount=80000
+;向神秘力量奉献的基础成功率(%, 监狱与禁闭室)
+mysticPrisonBribeBaseRate=20
+;向神秘力量奉献的最低金币要求(异世界、医院等其他异常状态)
+mysticOtherBribeMinAmount=20000
+;必能逃脱的奉献金币数(其他异常状态)
+mysticOtherBribeMaxAmount=100000
+;向神秘力量奉献的基础成功率(%, 其他异常状态)
+mysticOtherBribeBaseRate=5
 
 ;==== 黑白名单配置 ====
 ; 以下均使用半角逗号分隔多个QQ号或群号，例如 "111,222,333"

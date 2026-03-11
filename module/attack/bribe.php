@@ -34,8 +34,16 @@ if($target !== $master) {
     replyAndLeave("你尝试拿出一些钱给狱友，但是什么事也没有发生。");
 }
 
-$minBribe = (int)config('mysticBribeMinAmount', 20000);
-$maxBribe = (int)config('mysticBribeMaxAmount', 100000);
+$isPrison = ($status === 'imprisoned' || $status === 'confined');
+if ($isPrison) {
+    $minBribe = (int)config('mysticPrisonBribeMinAmount', 20000);
+    $maxBribe = (int)config('mysticPrisonBribeMaxAmount', 80000);
+    $baseRate = (int)config('mysticPrisonBribeBaseRate', 20);
+} else {
+    $minBribe = (int)config('mysticOtherBribeMinAmount', 20000);
+    $maxBribe = (int)config('mysticOtherBribeMaxAmount', 100000);
+    $baseRate = (int)config('mysticOtherBribeBaseRate', 5);
+}
 
 $amount = (int)nextArg();
 if ($amount < $minBribe) {
@@ -46,10 +54,10 @@ if (getCredit($Event['user_id']) < $amount) {
     replyAndLeave('你好像并没有这么多钱哦…');
 }
 
-// probability math: min -> 5%, max -> 100%
+// probability math: baseRate -> max(100%)
 $rateRange = $maxBribe - $minBribe;
 if ($rateRange > 0) {
-    $rate = 5 + ($amount - $minBribe) / $rateRange * 95;
+    $rate = $baseRate + ($amount - $minBribe) / $rateRange * (100 - $baseRate);
 } else {
     $rate = 100;
 }
