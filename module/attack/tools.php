@@ -129,10 +129,20 @@ function performFreeStatusAttack(&$data, $from, $target, $atTarget, $magnificati
 		$getMoney = ceil((getLvl($from) - getLvl($target) + 10) * (getRp($from, time()) - getRp($target, time()) + 100) * rand(ceil(100 * $magnification), ceil(1000 * $magnification)) / 200 + 1);
 	}
 	
+	$targetIsBroke = false;
 	if(getCredit($target) - 10000 <= $getMoney) $getMoney = getCredit($target) - 9999;
-	if(getCredit($target) < 10000) $success = false;
+	if(getCredit($target) < 10000) {
+		$success = false;
+		$targetIsBroke = true;
+	}
 
-	if($success && $prison) {
+	if($targetIsBroke) {
+		$message = randString([
+			"你把 {$atTarget} 壁咚在墙角，上下摸了个遍，发现他连 10000 金币都拿不出来。",
+			"{$atTarget} 向你展示了他空空如也的钱包（<10000）。",
+			"你正准备动手，却发现 {$atTarget} 除了一堆maimai游戏币什么都没有，awmc。",
+		]);
+	} else if($success && $prison) {
 		$baseFine = (int)config('attackBaseFine', 500);
 		$fine = ceil(sqrt($getMoney) * 10 + $baseFine * $magnification);
 		decCredit($from, $fine, true);
@@ -210,12 +220,12 @@ function performFreeStatusAttack(&$data, $from, $target, $atTarget, $magnificati
 			}
 		} else {
 			$message = randString([
-				"你试图打劫 {$atTarget}。他把钱包翻了出来，发现是空的。",
+				"你试图打劫 {$atTarget}。他把钱包翻了出来，但你没有他的银行卡密码。",
 				"{$atTarget} 一看到你就溜了。",
 				"你对着 {$atTarget} 的口袋伸出了手，结果掏出了一堆maimai游戏币。",
-				"你偷偷摸摸接近 {$atTarget}，结果发现他正在刷银行卡，余额负数，溜了溜了。",
+				"你偷偷摸摸接近 {$atTarget}，结果发现他正在银行门口领鸡蛋，你会心的离开了。",
 				"你盯上了 {$atTarget}，但对方突然掏出一把更大的刀，你转身就跑了！",
-				"你喊了声“打劫”，却发现 {$atTarget} 是个魔术师，转眼间人和钱包都消失了。",
+				"你喊了声“打劫”，却发现 {$atTarget} 使用了魔术技巧，转眼间人和钱包都消失了。",
 			]);
 		}
 	}
