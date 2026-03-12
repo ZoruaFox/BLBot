@@ -89,7 +89,7 @@ if ($success) {
     decCredit($Event['user_id'], $amount, true);
     
     $failMessages = [
-        'imprisoned' => "你把 {$amount} 金币塞进了门缝。门外传来了守卫的怒吼：‘竟敢在神秘力量眼皮底下行贿！这钱没收了！’",
+        'imprisoned' => "你把 {$amount} 金币塞进了门缝。金币消失在了门缝中，但是什么事也没有发生。",
         'confined' => "你把 {$amount} 金币塞进了禁闭室的角落。但过了一会钱消失了，你仍在面壁思过。",
         'hospitalized' => "你试图用 {$amount} 金币买通护士，但是护士长没收了这笔钱，并给你来了一发大号镇定剂。",
         'arknights' => "你试图用 {$amount} 龙门币贿赂某个制药公司首席执行官，但是对方并没有理你。’",
