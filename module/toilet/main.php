@@ -15,6 +15,10 @@ if($fromMiddleware) {
 $toiletInfo = json_decode(getData('toilet/toiletInfo.json'), true);
 $citiesMeta = json_decode(getData('toilet/citiesMeta.json'), true);
 
+if(!is_array($toiletInfo) || empty($toiletInfo) || !is_array($citiesMeta) || empty($citiesMeta)) {
+    replyAndLeave('⚠ 洗手间数据库未初始化或为空，请管理员先执行相关抓取更新指令并排序！');
+}
+
 $results = [];
 $citiesNotSupported = [];
 $similarStations = [];

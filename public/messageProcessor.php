@@ -3,6 +3,11 @@
 $message = $Event['message'];
 $message = preg_replace('/\[CQ:face,id=(\d+?),large=\]/', '[CQ:face,id=$1]', $message);
 $message = preg_replace('/\[CQ:at,qq=(\d+?),name=\]/', '[CQ:at,qq=$1]', $message);
+
+if(preg_match('/\[CQ:at,qq='.config('master').'\]/', $message)) {
+    return;
+}
+
 if(preg_match('/\[CQ:reply,id=(-?\d+?)\]/', $message, $matches)) {
     $Referer = $matches[1];
     $message = preg_replace('/\[CQ:reply,id=(-?\d+?)\]/', '', $message);

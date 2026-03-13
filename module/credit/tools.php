@@ -34,7 +34,15 @@ function decCredit($QQ, $pay, $force = false) {
     }
 }
 
-function transferCredit($from, $to, $transfer, $fee = 1.01) {
-    decCredit($from, ceil($transfer * $fee));
-    addCredit($to, $transfer);
+function transferCredit($from, $to, $transfer, $feeRatio = 0.01) {
+    if ($transfer <= 0) return 0;
+    
+    // Calculate fee strictly independently to avoid floating point multiplier issues
+    $fee = ceil($transfer * $feeRatio);
+    
+    // Explicit integer casting to protect decCredit/addCredit
+    decCredit($from, (int)($transfer + $fee));
+    addCredit($to, (int)$transfer);
+    
+    return $fee;
 }

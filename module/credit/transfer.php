@@ -14,9 +14,12 @@ if(!$QQ){
 }
 
 $transfer = abs((int)nextArg());
-transferCredit($Event['user_id'], $QQ, $transfer, 1.01);
+if ($transfer == 0) {
+    replyAndLeave('转账金额不能为 0 呢。');
+}
 
-$fee = ceil(0.01 * $transfer);
+$fee = transferCredit($Event['user_id'], $QQ, $transfer, 0.01);
+
 $Queue[]= replyMessage('转账 '.$transfer.' 金币给 '.CQCode::At($QQ).' 成功（手续费 '.$fee.' 金币），您的余额为 '.getCredit($Event['user_id']));
 
 ?>
