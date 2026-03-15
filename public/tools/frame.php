@@ -495,7 +495,7 @@ function nextArg(bool $getRemaining = false) {
         return implode(' ', array_slice($Command, $index));
     }
     
-    return isset($Command[$index]) ? $Command[$index++] : '';
+    return isset($Command[$index]) ? $Command[$index++] : null;
 }
 
 /**
