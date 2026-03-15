@@ -12,8 +12,12 @@ function setCredit($QQ, $credit, $set = false){
 function addCredit($QQ, $income) {
     $income = (int)$income;
     if($income < 0) return false;
+    $newCredit = getCredit($QQ) + $income;
+    if (is_float($newCredit) && $newCredit > PHP_INT_MAX) {
+        $newCredit = PHP_INT_MAX; // 防止金币增加导致溢出变为负数
+    }
     setData('credit.history', "+ {$QQ} {$income}\n", true);
-    return setCredit($QQ, getCredit($QQ)+$income, true);
+    return setCredit($QQ, (int)$newCredit, true);
 }
 
 function decCredit($QQ, $pay, $force = false) {
@@ -39,9 +43,17 @@ function transferCredit($from, $to, $transfer, $feeRatio = 0.01) {
     
     // Calculate fee strictly independently to avoid floating point multiplier issues
     $fee = ceil($transfer * $feeRatio);
+    $pay = $transfer + $fee;
+    if (is_float($pay) && $pay > PHP_INT_MAX) {
+        replyAndLeave('转账金额过大，无法处理呢。');
+    }
     
-    // Explicit integer casting to protect decCredit/addCredit
-    decCredit($from, (int)($transfer + $fee));
+    $pay = (int)$pay;
+    if ($pay <= 0) {
+        replyAndLeave('转账金额异常，无法处理呢。');
+    }
+    
+    decCredit($from, $pay);
     addCredit($to, (int)$transfer);
     
     return $fee;
