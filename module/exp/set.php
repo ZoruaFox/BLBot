@@ -9,6 +9,9 @@ $QQ = nextArg();
 if(!(preg_match('/\d+/', $QQ, $match) && $match[0] == $QQ)){
     $QQ = parseQQ($QQ);
 }
+if(!$QQ){
+    replyAndLeave('请指定要设置经验的对象。');
+}
 $exp = (int)nextArg();
 setExp($QQ, $exp);
 
