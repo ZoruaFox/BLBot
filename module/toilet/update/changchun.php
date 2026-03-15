@@ -20,7 +20,7 @@ $citiesMeta['changchun'] = [
 ];
 
 // Get lines
-$lines = json_decode(file_get_contents('http://app.ccetravel.cn/invoices/subwayline/lines'), true)['lines'];
+$lines = json_decode(fetchHttp('http://app.ccetravel.cn/invoices/subwayline/lines'), true)['lines'];
 $stationInfoApi = 'http://app.ccetravel.cn/api-truetime/trainRunTime/v107?qtype=1&standcode=';
 
 // Get stations

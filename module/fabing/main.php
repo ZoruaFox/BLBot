@@ -9,4 +9,4 @@ requireLvl(1);
 
 $target = nextArg(true);
 if(!$target) $target = getNickname($Event['user_id']);
-replyAndLeave(file_get_contents('http://127.0.0.1:4399/v2/fabing?encoding=text&name='.urlencode($target)));
+replyAndLeave(fetchHttp('https://60s.viki.moe/v2/fabing?encoding=text&name='.urlencode($target), 3));

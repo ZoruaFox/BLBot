@@ -28,9 +28,9 @@ $context = stream_context_create([
         'header' => 'version: 280',
     ],
 ]);
-$rawData = json_decode(file_get_contents('https://api.wakeup.fun/share_schedule/get?key='.$code, false, $context), true);
+$rawData = json_decode(fetchHttp('https://api.wakeup.fun/share_schedule/get?key='.$code, 5, ['http' => ['header' => 'version: 280']]), true);
 if (!$rawData || !$rawData['data']) {
-    $rawData = json_decode(file_get_contents('https://i.wakeup.fun/share_schedule/get?key='.$code, false, $context), true);
+    $rawData = json_decode(fetchHttp('https://i.wakeup.fun/share_schedule/get?key='.$code, 5, ['http' => ['header' => 'version: 280']]), true);
     if (!$rawData['data']) replyAndLeave('数据读取失败，可能是分享口令无效或已过期…');
 }
 $data = [];

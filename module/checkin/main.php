@@ -47,7 +47,7 @@ switch(getStatus($User_id)) {
         if($credit < 1000000) {
             $income = rand($lowMin, $lowMax);
         } else if($credit < 10000000) {
-            $income = rand(ceil($lowMin - ($credit - 1000000) * 0.001), ceil($lowMax - ($credit - 1000000) * 0.001));
+            $income = rand((int)ceil($lowMin - ($credit - 1000000) * 0.001), (int)ceil($lowMax - ($credit - 1000000) * 0.001));
         } else {
             $income = rand($highMin, $highMax);
         }

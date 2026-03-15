@@ -11,7 +11,7 @@ $pattern = "/[\x{007f}-\x{009f}]|\x{00ad}|[\x{0483}-\x{0489}]|[\x{0559}-\x{055a}
 $Config = parse_ini_file('../config.ini', false);
 $Event = json_decode(file_get_contents('php://input'), true);
 $Event['message'] = preg_replace('/\[CQ:at,qq=(\d+)(?:,name=.+?)?]/', ' [CQ:at,qq=$1] ', preg_replace($pattern, '', trim(CQCode::DecodeCQCode($Event['raw_message'] ?? $Event['message'] ?? ''))));
-$User_id = $Event['user_id'];
+$User_id = $Event['user_id'] ?? null;
 $CQ = new CoolQ(config('API', '127.0.0.1:5700'), config('token', ''));
 $Queue = [];
 $MsgSender = new MessageSender($CQ);

@@ -10,7 +10,7 @@ try {
     $listen = config('Listen');
     $whiteListJson = getData('whitelist.json');
     $whiteList = $whiteListJson ? json_decode($whiteListJson, true)['groups'] : null;
-    if($whiteList && !in_array($Event['group_id'], $whiteList) && isset($Event['group_id'])) {
+    if($whiteList && isset($Event['group_id']) && !in_array($Event['group_id'], $whiteList)) {
         $Queue[] = sendMaster('No access at '.$Event['group_id']);
         $Queue[] = sendDevGroup('No access at '.$Event['group_id']);
         $CQ->setGroupLeave($Event['group_id']);

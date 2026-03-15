@@ -14,14 +14,14 @@ if(preg_match('/\[CQ:reply,id=(-?\d+?)\]/', $message, $matches)) {
 }
 $message = trim(preg_replace('/^\s*\[CQ:at,qq='.config('bot').'\]/', '', $message));
 
-$length = strpos($message, PHP_EOL);
+$length = strpos($message, "\n");
 if(false === $length) {
     $length = strlen($message);
 }
 
-if(preg_match('/^('.config('prefix', '#').')/', $message, $prefix)
-    || preg_match('/^('.config('prefix2', '.').')/', $message, $prefix) && config('enablePrefix2', false)) {
-    $Command = parseCommand(mb_substr($message, mb_strlen($prefix[1]) - 1, $length));
+if(preg_match('/^('.preg_quote(config('prefix', '#'), '/').')/', $message, $prefix)
+    || (config('enablePrefix2', false) && preg_match('/^('.preg_quote(config('prefix2', '.'), '/').')/', $message, $prefix))) {
+    $Command = parseCommand(substr($message, 0, $length));
     $Text = substr($message, $length + 1);
     $module = substr(nextArg(), strlen($prefix[1]));
     try {

@@ -8,15 +8,45 @@ use kjBot\Frame\LvlLowException;
 error_reporting(E_ALL ^ E_WARNING);
 
 /**
+ * 读取 HTTP 资源（带超时拦截）
+ */
+function fetchHttp($url, $timeout = 5, $contextOpts = []) {
+    $defaultOpts = [
+        'http' => [
+            'timeout' => $timeout,
+            'ignore_errors' => true
+        ],
+        'ssl' => [
+            'verify_peer' => false,
+            'verify_peer_name' => false
+        ]
+    ];
+    // 合并传入的上下文配置
+    if(isset($contextOpts['http'])) {
+        $defaultOpts['http'] = array_merge($defaultOpts['http'], $contextOpts['http']);
+    }
+    return @file_get_contents($url, false, stream_context_create($defaultOpts));
+}
+
+/**
+ * 内存缓存
+ */
+$memoryCache_getData = [];
+$memoryCache_config = [];
+
+/**
  * 读取配置文件
  * @param string $kay 键值
  * @param string $defaultValue 默认值
  * @return string|null
  */
-function config(string $key, string $defaultValue = null): string {
-    global $Config;
+function config(string $key, $defaultValue = null) {
+    global $Config, $memoryCache_config;
+
+    if(isset($memoryCache_config[$key])) return $memoryCache_config[$key];
 
     if($Config && array_key_exists($key, $Config)) {
+        $memoryCache_config[$key] = $Config[$key];
         return $Config[$key];
     } else {
         return $defaultValue;
@@ -103,6 +133,12 @@ function sendDevGroup(string $msg, bool $auto_escape = false, bool $async = fals
  * @return mixed string|false
  */
 function setData(string $filePath, $data, bool $pending = false) {
+    global $memoryCache_getData;
+    if(!$pending) {
+        $memoryCache_getData[$filePath] = $data;
+    } else {
+        unset($memoryCache_getData[$filePath]); // Invalidate cache on append
+    }
     if(!is_dir(dirname('../storage/data/'.$filePath))) {
         @mkdir(dirname('../storage/data/'.$filePath), 0777, true);
     }
@@ -110,6 +146,9 @@ function setData(string $filePath, $data, bool $pending = false) {
 }
 
 function delData(string $filePath) {
+    global $memoryCache_getData;
+    unset($memoryCache_getData[$filePath]);
+    if(!file_exists('../storage/data/'.$filePath)) return true;
     return unlink('../storage/data/'.$filePath);
 }
 
@@ -119,8 +158,13 @@ function delData(string $filePath) {
  * @return mixed string|false
  */
 function getData(string $filePath) {
+    global $memoryCache_getData;
+    if(isset($memoryCache_getData[$filePath])) return $memoryCache_getData[$filePath];
+
     if(!file_exists('../storage/data/'.$filePath)) return false;
-    return file_get_contents('../storage/data/'.$filePath);
+    $data = file_get_contents('../storage/data/'.$filePath);
+    $memoryCache_getData[$filePath] = $data;
+    return $data;
 }
 
 function getDataPath(string $filePath) {
@@ -179,15 +223,17 @@ function getAvatar($user_id, $large = false) {
     $cacheFile = "avatar/{$size}/{$user_id}";
     $avatar = getCache($cacheFile);
     if(!$avatar || time() - filemtime(getCachePath($cacheFile)) > $refreshInverval) {
-        $avatar = file_get_contents("https://q1.qlogo.cn/g?b=qq&s={$size}&nk={$user_id}");
-        $img = new Imagick();
-        $img->readImageBlob($avatar);
-        $img->setImageFormat('png');
-        $img->setImageAlphaChannel(Imagick::ALPHACHANNEL_ACTIVATE);
-        $avatar = $img->getImagesBlob();
-        $img->clear();
-        $img->destroy();
-        setCache($cacheFile, $avatar);
+        $avatar = fetchHttp("https://q1.qlogo.cn/g?b=qq&s={$size}&nk={$user_id}");
+        if ($avatar) {
+            $img = new Imagick();
+            $img->readImageBlob($avatar);
+            $img->setImageFormat('png');
+            $img->setImageAlphaChannel(Imagick::ALPHACHANNEL_ACTIVATE);
+            $avatar = $img->getImagesBlob();
+            $img->clear();
+            $img->destroy();
+            setCache($cacheFile, $avatar);
+        }
     }
     return $avatar;
 }
@@ -445,7 +491,11 @@ function nextArg(bool $getRemaining = false) {
     global $Command;
     static $index = 0;
 
-    return $getRemaining ? implode(' ', array_slice($Command, $index)) : $Command[$index++];
+    if ($getRemaining) {
+        return implode(' ', array_slice($Command, $index));
+    }
+    
+    return isset($Command[$index]) ? $Command[$index++] : '';
 }
 
 /**

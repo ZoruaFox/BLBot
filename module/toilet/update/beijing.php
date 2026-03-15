@@ -20,8 +20,8 @@ $citiesMeta['beijing'] = [
     'logo' => 'metro_logo_beijing.svg',
 ];
 
-$map = json_decode(file_get_contents('https://appconfig.ruubypay.com/stations/map-app.json'), true);
-$accLocation = json_decode(file_get_contents('https://appconfig.ruubypay.com/stations/acclocation.json'), true);
+$map = json_decode(fetchHttp('https://appconfig.ruubypay.com/stations/map-app.json'), true);
+$accLocation = json_decode(fetchHttp('https://appconfig.ruubypay.com/stations/acclocation.json'), true);
 
 $lineMap = [];
 foreach($map['lines_data'] as $line) {
