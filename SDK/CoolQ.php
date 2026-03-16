@@ -459,17 +459,18 @@ class CoolQ {
         $last_error = error_get_last();
         
         // 增加调试记录机制，写入到 storage/data 方便排错
-        $log_file = dirname(__DIR__, 1) . '/storage/data/http_debug.log';
-        $log_data = sprintf(
-            "[%s] API: %s\nPayload: %s\nResponse: %s\nError: %s\nHeaders: %s\n---\n",
-            date('Y-m-d H:i:s'),
-            $url,
-            $json_payload,
-            var_export($response, true),
-            var_export($last_error, true),
-            var_export($http_response_header ?? null, true)
-        );
-        @file_put_contents($log_file, $log_data, FILE_APPEND);
+        // 屏蔽过大日志
+        // $log_file = dirname(__DIR__, 1) . '/storage/data/http_debug.log';
+        // $log_data = sprintf(
+        //     "[%s] API: %s\nPayload: %s\nResponse: %s\nError: %s\nHeaders: %s\n---\n",
+        //     date('Y-m-d H:i:s'),
+        //     $url,
+        //     $json_payload,
+        //     var_export($response, true),
+        //     var_export($last_error, true),
+        //     var_export($http_response_header ?? null, true)
+        // );
+        // @file_put_contents($log_file, $log_data, FILE_APPEND);
 
         $result = json_decode($response);
         if (!$result || !isset($result->retcode)) return null;

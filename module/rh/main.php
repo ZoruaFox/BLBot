@@ -243,6 +243,9 @@ function countDownGame($time) {
     sleep(10);
 
     // 看看人数够不够
+    // 为了防止 getData 缓存，需要重置一下缓存
+    global $memoryCache_getData;
+    unset($memoryCache_getData['rh/group/'.$Event['group_id']]);
     $rhData = json_decode(getData('rh/group/'.$Event['group_id']), true);
     if($time === 0 && count($rhData['players']) <= 3) {
         // 延迟一分钟
