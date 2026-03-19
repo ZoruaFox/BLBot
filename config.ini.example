@@ -41,6 +41,8 @@ checkinLowIncomeMax=150000
 ;存款大于等于1000万时的签到金币底数与上限
 checkinHighIncomeMin=1000
 checkinHighIncomeMax=10000
+;签到金币系数（默认0.9，即整体约下调10%）
+checkinIncomeFactor=0.9
 ;被外星人抓走的冻结时间(秒)
 abductionDuration=86400
 
