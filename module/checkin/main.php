@@ -41,8 +41,10 @@ switch(getStatus($User_id)) {
 
         $lowMin = (int)config('checkinLowIncomeMin', '10000');
         $lowMax = (int)config('checkinLowIncomeMax', '100000');
-        $highMin = (int)config('checkinHighIncomeMin', '1000');
+                $highMin = (int)config('checkinHighIncomeMin', '1000');
         $highMax = (int)config('checkinHighIncomeMax', '10000');
+        $incomeFactor = floatval(config('checkinIncomeFactor', '0.9')); // 略微下调签到金币（默认 90%）
+        $incomeFactor = max(0.5, min(1.2, $incomeFactor));
 
         if($credit < 1000000) {
             $income = rand($lowMin, $lowMax);
@@ -51,7 +53,7 @@ switch(getStatus($User_id)) {
         } else {
             $income = rand($highMin, $highMax);
         }
-        $income = floor(1 + $income * getRp($Event['user_id']) / 50);
+        $income = floor(1 + $income * getRp($Event['user_id']) / 50 * $incomeFactor);
         $originLvl = getLvl($Event['user_id']);
 
         clearstatcache();
