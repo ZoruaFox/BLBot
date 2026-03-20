@@ -1,5 +1,10 @@
 <?php
 
+// 赛马入场费
+function rhEntryFee(): int {
+    return 2000;
+}
+
 // 离开赛马
 function le(string $str, bool $endGame = true, bool $reply = false) {
     global $Event;
@@ -111,8 +116,8 @@ function initGame() {
         le('你的'.$assets['h'].'现在在别的赛'.$assets['h'].'场哦？', false, true);
     }
 
-    // 检查金币是否足够
-    $entryFee = 2000;
+        // 检查金币是否足够
+    $entryFee = rhEntryFee();
     loadModule('credit.tools');
     if(getCredit($Event['user_id']) < $entryFee) {
         le('你没有足够的金币发起赛'.$assets['h'].'哦（需要 '.$entryFee.' 金币）～', false, true);
@@ -128,9 +133,9 @@ function initGame() {
         le('你的马正在休息，大约还需要'.(((intval($time / 60) > 0) ? (intval($time / 60).'分') : '')).((($time % 60) > 0) ? ($time % 60).'秒' : '钟').'～', false, true);
     }
 
-    // 锁定马
-    lockHorse($Event['user_id']);
+        // 先扣费再锁马，避免极端情况下扣费失败导致马锁残留
     decCredit($Event['user_id'], $entryFee);
+    lockHorse($Event['user_id']);
 
     // 50% 概率出现奇怪的马
     $determination = rand(1, 100);
@@ -215,13 +220,13 @@ function joinGame() {
         replyAndLeave('你的'.$horse.'正在休息，大约还需要'.(((intval($time / 60) > 0) ? (intval($time / 60).'分') : '')).((($time % 60) > 0) ? ($time % 60).'秒' : '钟').'～');
     }
 
-    $entryFee = 2000;
+        $entryFee = rhEntryFee();
     if(getCredit($Event['user_id']) < $entryFee) {
         replyAndLeave('你没有足够的金币加入赛'.$horse.'哦（需要 '.$entryFee.' 金币）～');
     }
 
+        decCredit($Event['user_id'], $entryFee);
     lockHorse($Event['user_id']);
-    decCredit($Event['user_id'], $entryFee);
 
     $rhData['players'][] = $Event['user_id'];
     setData('rh/group/'.$Event['group_id'], json_encode($rhData));
@@ -234,6 +239,7 @@ function joinGame() {
 // 开始前的倒计时
 function countDownGame($time) {
     global $Event, $assets;
+    loadModule('credit.tools');
 
     // 倒计时一分钟
     sleep(30);
@@ -252,9 +258,12 @@ function countDownGame($time) {
         re('参与赛'.$assets['h'].'的人数太少了，本场赛'.$assets['h'].'延迟一分钟开始～还有60秒～');
         countDownGame(1);
         return;
-    } else if($time !== 0 && count($rhData['players']) <= 1) {
-        unlockHorse($Event['user_id']);
-        le('你'.$assets['h'].'的，场上还是只有一匹'.$assets['h'].'，没法赛'.$assets['h'].'了呢', false);
+        } else if($time !== 0 && count($rhData['players']) <= 1) {
+        $entryFee = rhEntryFee();
+        $onlyPlayer = $rhData['players'][0] ?? $Event['user_id'];
+        addCredit($onlyPlayer, $entryFee);
+        unlockHorse($onlyPlayer);
+        le('你'.$assets['h'].'的，场上还是只有一匹'.$assets['h'].'，没法赛'.$assets['h'].'了呢\n已退还入场费 '.$entryFee.' 金币～', false);
     } else {
         setData('rh/group/'.$Event['group_id'], json_encode(['status' => 'started', 'players' => $rhData['players'], 'time' => time()]));
         if(count($rhData['players']) <= 3 || !rand(0, 9)) {
@@ -269,6 +278,7 @@ function countDownGame($time) {
 function startGame($rhData): never {
     loadModule('rh.tools');
     loadModule('credit.tools');
+    loadModule('jrrp.tools');
 
     global $Event, $assets;
     global $horses;
@@ -536,18 +546,32 @@ function startGame($rhData): never {
             }
         }
 
-        if($win !== null) {
-            $money = rand($playersCount * 500, $playersCount * 2000);
+                if($win !== null) {
+            $entryFee = rhEntryFee();
+                        $paidPlayersCount = 0;
+            $botSponsored = false;
+            foreach($players as $player) {
+                if($player != config('bot')) {
+                    $paidPlayersCount += 1;
+                } else {
+                    // Bot 特殊逻辑：默认不持有金币，但参与时视作补足一份入场费进入奖池
+                    $botSponsored = true;
+                }
+            }
+            $basePrize = $paidPlayersCount * $entryFee + ($botSponsored ? $entryFee : 0);
             sleep(5);
-            $determination = rand(1, 100);
-            $corpseFraudulent = $horses[$win]->isDead();
-            if($players[$win] != config('bot') && !$corpseFraudulent && $determination <= 90) {
-                // 获得金币 90%
-                addCredit($players[$win], $money);
-                le(($win + 1).'号'.$horses[$win]->getChar().'成功抵达终点，[CQ:at,qq='.$players[$win].'] 获胜，获得'.$money.'金币哦～🏆');
+
+            if($players[$win] != config('bot')) {
+                $winnerJrrp = getRp($players[$win], time());
+                                // 人品加成控制在 0%~6%（较之前稍陡）
+                $bonusRate = intval(floor($winnerJrrp / 15));
+                $bonus = intval(floor($basePrize * $bonusRate / 100));
+                $prize = $basePrize + $bonus;
+
+                addCredit($players[$win], $prize);
+                le(($win + 1).'号'.$horses[$win]->getChar().'成功抵达终点，[CQ:at,qq='.$players[$win].'] 获胜，赢得奖池'.$basePrize.'金币'.($botSponsored ? '（含 Bot 补足入场费 '.$entryFee.'）' : '').($bonus > 0 ? '，并触发今日人品('.$winnerJrrp.')加成 +'.$bonus.'（'.$bonusRate.'%）' : '。今日人品('.$winnerJrrp.')未触发额外加成').'，共获得'.$prize.'金币哦～🏆');
             } else {
-                // 没金币了 10%
-                le(($win + 1).'号'.$horses[$win]->getChar().'成功'.($corpseFraudulent === null ? '抵达终点' : getRandChar(4)).'，[CQ:at,qq='.$players[$win].'] 获胜，但是'.$horses[$win]->getChar().'把金币'.($corpseFraudulent === null ? '吃' : getRandChar(1)).'掉了～🏆');
+                le(($win + 1).'号'.$horses[$win]->getChar().'成功抵达终点，[CQ:at,qq='.$players[$win].'] 获胜，Bot 把奖池'.$basePrize.'金币'.($botSponsored ? '（含 Bot 补足入场费 '.$entryFee.'）' : '').'叼走了～🏆');
             }
         }
         if(!count($aliveHorse)) {

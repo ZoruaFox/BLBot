@@ -31,6 +31,8 @@ alias=true
 ;==== 聊天与复读配置 ====
 ;群消息复读阈值（出现X次相同消息后机器人复读），默认为3
 repeatThreshold=3
+;垃圾分类查询接口模板，{keyword} 会被替换为查询词的 URL 编码
+trashApiTemplate="https://api.vvhan.com/api/lajifenlei?name={keyword}"
 
 ;==== 经济与数值配置 ====
 ;签到每日获得的经验值
