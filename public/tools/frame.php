@@ -85,6 +85,65 @@ function getMongoDataCollection(bool $strict = false) {
     return $collection;
 }
 
+function getMongoPrimaryReadPreference(): \MongoDB\Driver\ReadPreference {
+    static $readPreference = null;
+    if($readPreference !== null) return $readPreference;
+
+    $mode = defined('MongoDB\\Driver\\ReadPreference::PRIMARY')
+        ? \MongoDB\Driver\ReadPreference::PRIMARY
+        : \MongoDB\Driver\ReadPreference::RP_PRIMARY;
+
+    $readPreference = new \MongoDB\Driver\ReadPreference($mode);
+    return $readPreference;
+}
+
+function getMongoOperationOptions(array $options = []): array {
+    if(!isset($options['readPreference'])) {
+        $options['readPreference'] = getMongoPrimaryReadPreference();
+    }
+
+    return $options;
+}
+
+function ensureMongoPersistenceReady(): void {
+    static $checked = false;
+    if($checked || getDataBackend() !== 'mongo') return;
+
+    global $Database;
+    if(!isset($Database)) {
+        throw new \RuntimeException('MongoDB 数据库对象未初始化，无法启用 mongo 持久化后端。');
+    }
+
+    $Database->command(['ping' => 1], getMongoOperationOptions());
+
+    $collection = getMongoDataCollection(true);
+    $collection->createIndex(['updated_at' => 1], ['background' => true]);
+
+    $probeKey = '__blbot/system/persistence_probe';
+    $probeValue = (string)time();
+    $writeResult = $collection->updateOne(
+        ['_id' => $probeKey],
+        ['$set' => ['value' => $probeValue, 'updated_at' => new \MongoDB\BSON\UTCDateTime()]],
+        getMongoOperationOptions(['upsert' => true]),
+    );
+
+    if(!$writeResult->isAcknowledged()) {
+        throw new \RuntimeException('MongoDB 持久化自检失败：写入探针未被确认。');
+    }
+
+    $probeDoc = $collection->findOne(
+        ['_id' => $probeKey],
+        getMongoOperationOptions(['projection' => ['value' => 1]]),
+    );
+
+    if(!$probeDoc || !isset($probeDoc['value']) || (string)$probeDoc['value'] !== $probeValue) {
+        throw new \RuntimeException('MongoDB 持久化自检失败：探针数据读取不一致。');
+    }
+
+    $checked = true;
+}
+
+
 
 function normalizeStoredDataValue($data): string {
     if(is_string($data)) return $data;
@@ -112,7 +171,7 @@ function mongoSetData(string $filePath, $data, bool $pending = false) {
     $result = $collection->updateOne(
         ['_id' => $filePath],
         ['$set' => ['value' => $value, 'updated_at' => new \MongoDB\BSON\UTCDateTime()]],
-        ['upsert' => true],
+        getMongoOperationOptions(['upsert' => true]),
     );
 
     return $result->isAcknowledged() ? strlen($value) : false;
@@ -120,10 +179,14 @@ function mongoSetData(string $filePath, $data, bool $pending = false) {
 
 
 
+
 function mongoGetData(string $filePath) {
     $collection = getMongoDataCollection(true);
 
-    $doc = $collection->findOne(['_id' => $filePath], ['projection' => ['value' => 1]]);
+    $doc = $collection->findOne(
+        ['_id' => $filePath],
+        getMongoOperationOptions(['projection' => ['value' => 1]]),
+    );
     if(!$doc || !array_key_exists('value', $doc)) return false;
 
     return normalizeStoredDataValue($doc['value']);
@@ -131,10 +194,14 @@ function mongoGetData(string $filePath) {
 
 
 
+
 function mongoGetDataUpdatedAt(string $filePath): int {
     $collection = getMongoDataCollection(true);
 
-    $doc = $collection->findOne(['_id' => $filePath], ['projection' => ['updated_at' => 1]]);
+    $doc = $collection->findOne(
+        ['_id' => $filePath],
+        getMongoOperationOptions(['projection' => ['updated_at' => 1]]),
+    );
     if(!$doc || !isset($doc['updated_at'])) return 0;
 
     $updatedAt = $doc['updated_at'];
@@ -147,12 +214,14 @@ function mongoGetDataUpdatedAt(string $filePath): int {
 
 
 
+
 function mongoDelData(string $filePath): bool {
     $collection = getMongoDataCollection(true);
 
-    $result = $collection->deleteOne(['_id' => $filePath]);
+    $result = $collection->deleteOne(['_id' => $filePath], getMongoOperationOptions());
     return $result->isAcknowledged();
 }
+
 
 
 function mongoGetDataFolderContents(string $folderPath): array {
@@ -164,7 +233,7 @@ function mongoGetDataFolderContents(string $folderPath): array {
     $regex = '^'.preg_quote($prefix, '/').'[^/]+(?:/.*)?$';
     $cursor = $collection->find(
         ['_id' => ['$regex' => $regex]],
-        ['projection' => ['_id' => 1]],
+        getMongoOperationOptions(['projection' => ['_id' => 1]]),
     );
 
     $children = [];
@@ -181,6 +250,7 @@ function mongoGetDataFolderContents(string $folderPath): array {
 
     return array_values($children);
 }
+
 
 
 /**
