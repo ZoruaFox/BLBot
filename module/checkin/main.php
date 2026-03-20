@@ -56,9 +56,13 @@ switch(getStatus($User_id)) {
         $income = floor(1 + $income * getRp($Event['user_id']) / 50 * $incomeFactor);
         $originLvl = getLvl($Event['user_id']);
 
-        clearstatcache();
-        $checkinFilePath = '../storage/data/checkin/'.$Event['user_id'];
-        $lastCheckinTime = file_exists($checkinFilePath) ? filemtime($checkinFilePath) : 0;
+                clearstatcache();
+        $checkinMeta = getData('checkinMeta/'.$Event['user_id']);
+        $lastCheckinTime = $checkinMeta ? (int)$checkinMeta : 0;
+        if($lastCheckinTime <= 0 && getDataBackend() === 'file') {
+            $checkinFilePath = '../storage/data/checkin/'.$Event['user_id'];
+            $lastCheckinTime = file_exists($checkinFilePath) ? filemtime($checkinFilePath) : 0;
+        }
         if($lastCheckinTime > 0 && 0 == (int)date('Ymd') - (int)date('Ymd', $lastCheckinTime)) {
             $replys = [
                 "你今天{$word}过了！（震声",
@@ -138,8 +142,10 @@ switch(getStatus($User_id)) {
                 $today = date('md') == '0101' ? '今年' : '今天';
                 $reply .= "\n你是{$today}第 {$checkinData['checked']} 个{$word}的～";
             }
-            delData('checkin/'.$Event['user_id']);
+                        delData('checkin/'.$Event['user_id']);
+            delData('checkinMeta/'.$Event['user_id']);
             setData('checkin/'.$Event['user_id'], '');
+            setData('checkinMeta/'.$Event['user_id'], (string)time());
         }
         break;
 }

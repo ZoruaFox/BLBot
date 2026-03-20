@@ -68,9 +68,13 @@ switch($status) {
         }
         $msg .= "\n你被外星人{$randomParts}了。";
         break;
-    case 'free':
-        $checkinFilePath = '../storage/data/checkin/'.$QQ;
-        $lastCheckinTime = file_exists($checkinFilePath) ? filemtime($checkinFilePath) : 0;
+        case 'free':
+        $checkinMeta = getData('checkinMeta/'.$QQ);
+        $lastCheckinTime = $checkinMeta ? (int)$checkinMeta : 0;
+        if($lastCheckinTime <= 0 && getDataBackend() === 'file') {
+            $checkinFilePath = '../storage/data/checkin/'.$QQ;
+            $lastCheckinTime = file_exists($checkinFilePath) ? filemtime($checkinFilePath) : 0;
+        }
         if($lastCheckinTime == 0 || intval(date('Ymd')) - intval(date('Ymd', $lastCheckinTime)) > 0) {
             $msg .= "\n今天还没有签到哦～";
         }

@@ -50,6 +50,140 @@ function configBool(string $key, bool $defaultValue = false): bool {
 }
 
 /**
+ * 持久化后端（file|mongo）
+ */
+function getDataBackend(): string {
+    static $backend = null;
+    if($backend !== null) return $backend;
+
+    $configured = strtolower(trim((string)config('dataBackend', 'file')));
+    if(!in_array($configured, ['file', 'mongo'], true)) {
+        $configured = 'file';
+    }
+
+    $backend = $configured;
+    return $backend;
+}
+
+function getMongoDataCollection(bool $strict = false) {
+    global $Database;
+    static $collection = null;
+
+    if($collection !== null) return $collection;
+
+    if(!isset($Database)) {
+        if($strict) {
+            throw new \RuntimeException('MongoDB 连接未初始化，无法访问数据持久化后端。');
+        }
+        return null;
+    }
+
+    $collectionName = trim((string)config('mongoDataCollection', 'kv_store'));
+    if($collectionName === '') $collectionName = 'kv_store';
+
+    $collection = $Database->$collectionName;
+    return $collection;
+}
+
+
+function normalizeStoredDataValue($data): string {
+    if(is_string($data)) return $data;
+    if(is_scalar($data) || $data === null) return (string)$data;
+
+    $encoded = json_encode($data, JSON_UNESCAPED_UNICODE);
+    if($encoded === false) {
+        return '';
+    }
+
+    return $encoded;
+}
+
+
+function mongoSetData(string $filePath, $data, bool $pending = false) {
+    $collection = getMongoDataCollection(true);
+
+    $value = normalizeStoredDataValue($data);
+
+    if($pending) {
+        $current = mongoGetData($filePath);
+        $value = ($current === false ? '' : $current).$value;
+    }
+
+    $result = $collection->updateOne(
+        ['_id' => $filePath],
+        ['$set' => ['value' => $value, 'updated_at' => new \MongoDB\BSON\UTCDateTime()]],
+        ['upsert' => true],
+    );
+
+    return $result->isAcknowledged() ? strlen($value) : false;
+}
+
+
+
+function mongoGetData(string $filePath) {
+    $collection = getMongoDataCollection(true);
+
+    $doc = $collection->findOne(['_id' => $filePath], ['projection' => ['value' => 1]]);
+    if(!$doc || !array_key_exists('value', $doc)) return false;
+
+    return normalizeStoredDataValue($doc['value']);
+}
+
+
+
+function mongoGetDataUpdatedAt(string $filePath): int {
+    $collection = getMongoDataCollection(true);
+
+    $doc = $collection->findOne(['_id' => $filePath], ['projection' => ['updated_at' => 1]]);
+    if(!$doc || !isset($doc['updated_at'])) return 0;
+
+    $updatedAt = $doc['updated_at'];
+    if($updatedAt instanceof \MongoDB\BSON\UTCDateTime) {
+        return (int)floor($updatedAt->toDateTime()->format('U'));
+    }
+
+    return 0;
+}
+
+
+
+function mongoDelData(string $filePath): bool {
+    $collection = getMongoDataCollection(true);
+
+    $result = $collection->deleteOne(['_id' => $filePath]);
+    return $result->isAcknowledged();
+}
+
+
+function mongoGetDataFolderContents(string $folderPath): array {
+    $collection = getMongoDataCollection(true);
+
+    $prefix = trim($folderPath, '/');
+    if($prefix !== '') $prefix .= '/';
+
+    $regex = '^'.preg_quote($prefix, '/').'[^/]+(?:/.*)?$';
+    $cursor = $collection->find(
+        ['_id' => ['$regex' => $regex]],
+        ['projection' => ['_id' => 1]],
+    );
+
+    $children = [];
+    foreach($cursor as $doc) {
+        $id = (string)($doc['_id'] ?? '');
+        if($id === '' || !str_starts_with($id, $prefix)) continue;
+
+        $rest = substr($id, strlen($prefix));
+        if($rest === false || $rest === '') continue;
+
+        $child = explode('/', $rest, 2)[0];
+        if($child !== '') $children[$child] = $child;
+    }
+
+    return array_values($children);
+}
+
+
+/**
  * APCu 数据缓存是否可用
  */
 function useApcuDataCache(): bool {
@@ -64,6 +198,7 @@ function useApcuDataCache(): bool {
     $available = $enabledByConfig && $hasFunctions && $apcEnabled && $apcCliEnabled;
     return $available;
 }
+
 
 function getApcuDataCacheTtl(): int {
     $ttl = (int)config('apcuDataCacheTtl', 0);
@@ -175,39 +310,61 @@ function sendDevGroup(string $msg, bool $auto_escape = false, bool $async = fals
  */
 function setData(string $filePath, $data, bool $pending = false) {
     global $memoryCache_getData;
-    if(!$pending) {
-        $memoryCache_getData[$filePath] = $data;
+
+    $result = false;
+    if(getDataBackend() === 'mongo') {
+        $result = mongoSetData($filePath, $data, $pending);
     } else {
-        unset($memoryCache_getData[$filePath]); // Invalidate cache on append
+        if(!is_dir(dirname('../storage/data/'.$filePath))) {
+            @mkdir(dirname('../storage/data/'.$filePath), 0777, true);
+        }
+        $result = file_put_contents('../storage/data/'.$filePath, $data, $pending ? (FILE_APPEND | LOCK_EX) : LOCK_EX);
     }
 
-    if(useApcuDataCache()) {
-        $cacheKey = getApcuDataCacheKey($filePath);
-        if(!$pending) {
-            apcu_store($cacheKey, $data, getApcuDataCacheTtl());
-        } else {
-            apcu_delete($cacheKey);
+    if($result === false) {
+        return false;
+    }
+
+    if(!$pending) {
+        $storedValue = normalizeStoredDataValue($data);
+        $memoryCache_getData[$filePath] = $storedValue;
+        if(useApcuDataCache()) {
+            apcu_store(getApcuDataCacheKey($filePath), $storedValue, getApcuDataCacheTtl());
+        }
+    } else {
+        unset($memoryCache_getData[$filePath]);
+        if(useApcuDataCache()) {
+            apcu_delete(getApcuDataCacheKey($filePath));
         }
     }
 
-    if(!is_dir(dirname('../storage/data/'.$filePath))) {
-        @mkdir(dirname('../storage/data/'.$filePath), 0777, true);
-    }
-    return file_put_contents('../storage/data/'.$filePath, $data, $pending ? (FILE_APPEND | LOCK_EX) : LOCK_EX);
+    return $result;
 }
+
 
 
 function delData(string $filePath) {
     global $memoryCache_getData;
-    unset($memoryCache_getData[$filePath]);
 
-    if(useApcuDataCache()) {
-        apcu_delete(getApcuDataCacheKey($filePath));
+    $result = true;
+    if(getDataBackend() === 'mongo') {
+        $result = mongoDelData($filePath);
+    } else {
+        if(file_exists('../storage/data/'.$filePath)) {
+            $result = unlink('../storage/data/'.$filePath);
+        }
     }
 
-    if(!file_exists('../storage/data/'.$filePath)) return true;
-    return unlink('../storage/data/'.$filePath);
+    if($result !== false) {
+        unset($memoryCache_getData[$filePath]);
+        if(useApcuDataCache()) {
+            apcu_delete(getApcuDataCacheKey($filePath));
+        }
+    }
+
+    return $result;
 }
+
 
 
 /**
@@ -228,16 +385,24 @@ function getData(string $filePath) {
         }
     }
 
-    if(!file_exists('../storage/data/'.$filePath)) {
+    if(getDataBackend() === 'mongo') {
+        $data = mongoGetData($filePath);
+    } else {
+        if(!file_exists('../storage/data/'.$filePath)) {
+            $data = false;
+        } else {
+            $data = file_get_contents('../storage/data/'.$filePath);
+        }
+    }
+
+    if($data === false) {
         if(useApcuDataCache()) {
             apcu_delete(getApcuDataCacheKey($filePath));
         }
         return false;
     }
 
-    $data = file_get_contents('../storage/data/'.$filePath);
     $memoryCache_getData[$filePath] = $data;
-
     if(useApcuDataCache()) {
         apcu_store(getApcuDataCacheKey($filePath), $data, getApcuDataCacheTtl());
     }
@@ -246,14 +411,20 @@ function getData(string $filePath) {
 }
 
 
+
 function getDataPath(string $filePath) {
     return '../storage/data/'.$filePath;
 }
 
 function getDataFolderContents(string $folderPath) {
+    if(getDataBackend() === 'mongo') {
+        return mongoGetDataFolderContents($folderPath);
+    }
+
     $contents = scandir('../storage/data/'.$folderPath);
     return array_diff($contents, ['.', '..']);
 }
+
 
 /**
  * 缓存
@@ -584,17 +755,29 @@ function nextArg(bool $getRemaining = false) {
  * @param int $time 冷却时间
  */
 function coolDown(string $name, $time = null): int {
-    global $Event;
     if(null === $time) {
-        clearstatcache();
-        $coolDownFile = "../storage/data/coolDown/{$name}";
-        $fileTime = file_exists($coolDownFile) ? filemtime($coolDownFile) : 0;
-        return time() - $fileTime - (int)getData("coolDown/{$name}");
+        $duration = (int)getData("coolDown/{$name}");
+        $setAt = (int)getData("coolDownMeta/{$name}");
+
+        if($setAt <= 0) {
+            if(getDataBackend() === 'file') {
+                clearstatcache();
+                $coolDownFile = "../storage/data/coolDown/{$name}";
+                $setAt = file_exists($coolDownFile) ? filemtime($coolDownFile) : 0;
+            } else {
+                $setAt = mongoGetDataUpdatedAt("coolDown/{$name}");
+            }
+        }
+
+        return time() - $setAt - $duration;
     } else {
-        setData("coolDown/{$name}", $time);
-        return -$time;
+        setData("coolDown/{$name}", (string)(int)$time);
+        setData("coolDownMeta/{$name}", (string)time());
+        return -(int)$time;
     }
 }
+
+
 
 /**
  * 消息是否来自(指定)群

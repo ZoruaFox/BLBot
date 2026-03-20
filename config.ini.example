@@ -1,4 +1,4 @@
-;的就别动了
+;不懂的就别动了
 API="127.0.0.1:5700"
 token=
 ;数据库凭据
@@ -21,6 +21,12 @@ addFriendMsg="BLBot 已经是你的好友啦，发送 #help 查看帮助～"
 addGroupMsg="欢迎加入本群，我是 BLBot，发送 #help 查看帮助～"
 ;头像缓存时长
 avatarCacheTime=86400
+
+;==== 数据持久化后端配置 ====
+;持久化后端：file 或 mongo。建议生产使用 mongo（单一持久化真源）
+dataBackend="file"
+;MongoDB 中用于 getData/setData 键值存储的集合名
+mongoDataCollection="kv_store"
 
 ;==== PHP 缓存配置（可选） ====
 ;是否启用 APCu 作为 getData/setData 的共享缓存后端（需要安装并启用 APCu 扩展）
@@ -104,6 +110,19 @@ mysticOtherBribeMinAmount=20000
 mysticOtherBribeMaxAmount=100000
 ;向神秘力量奉献的基础成功率(%, 其他异常状态)
 mysticOtherBribeBaseRate=5
+
+;==== OPcache 建议（写入 php.ini，不在此文件生效） ====
+;以下仅为推荐值示例，请按部署环境调整：
+;zend_extension=opcache
+;opcache.enable=1
+;opcache.enable_cli=0
+;opcache.memory_consumption=128
+;opcache.interned_strings_buffer=16
+;opcache.max_accelerated_files=20000
+;opcache.validate_timestamps=1
+;opcache.revalidate_freq=2
+;opcache.save_comments=1
+;opcache.fast_shutdown=1
 
 ;==== 黑白名单配置 ====
 ; 以下均使用半角逗号分隔多个QQ号或群号，例如 "111,222,333"
