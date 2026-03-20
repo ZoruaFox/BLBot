@@ -2,7 +2,7 @@
 
 // 赛马入场费
 function rhEntryFee(): int {
-    return 2000;
+    return 3000;
 }
 
 // 离开赛马
