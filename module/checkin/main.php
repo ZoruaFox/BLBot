@@ -41,7 +41,7 @@ switch(getStatus($User_id)) {
 
         $lowMin = (int)config('checkinLowIncomeMin', '10000');
         $lowMax = (int)config('checkinLowIncomeMax', '100000');
-                $highMin = (int)config('checkinHighIncomeMin', '1000');
+        $highMin = (int)config('checkinHighIncomeMin', '1000');
         $highMax = (int)config('checkinHighIncomeMax', '10000');
         $incomeFactor = floatval(config('checkinIncomeFactor', '0.9')); // 略微下调签到金币（默认 90%）
         $incomeFactor = max(0.5, min(1.2, $incomeFactor));
@@ -54,15 +54,10 @@ switch(getStatus($User_id)) {
             $income = rand($highMin, $highMax);
         }
         $income = floor(1 + $income * getRp($Event['user_id']) / 50 * $incomeFactor);
+
         $originLvl = getLvl($Event['user_id']);
 
-                clearstatcache();
-        $checkinMeta = getData('checkinMeta/'.$Event['user_id']);
-        $lastCheckinTime = $checkinMeta ? (int)$checkinMeta : 0;
-        if($lastCheckinTime <= 0 && getDataBackend() === 'file') {
-            $checkinFilePath = '../storage/data/checkin/'.$Event['user_id'];
-            $lastCheckinTime = file_exists($checkinFilePath) ? filemtime($checkinFilePath) : 0;
-        }
+        $lastCheckinTime = getCheckinLastTimestamp($Event['user_id']);
         if($lastCheckinTime > 0 && 0 == (int)date('Ymd') - (int)date('Ymd', $lastCheckinTime)) {
             $replys = [
                 "你今天{$word}过了！（震声",
@@ -86,19 +81,13 @@ switch(getStatus($User_id)) {
                 "{$word}过了啦（半恼）",
                 "你不曾注意阴谋得逞者（指一直{$word}的你）在狞笑！",
                 "{$word}成…失败！说不定今天你已经{$c1}过了呢？",
-                "还{$word}？我{$c1}{$c1}你好不好？@".getNickname($Event["user_id"], $Event["group_id"])." {$word}！",
+                "还{$word}？我{$c1}{$c1}你好不好？@".getNickname($Event['user_id'], $Event['group_id'])." {$word}！",
                 "{$word}够了没…我都不知道说什么好……",
                 "你是整天{$word}的屑[CQ:emoji,id=128052]？",
             ];
             $reply = $replys[array_rand($replys)];
         } else {
-            $checkinData = json_decode(getData('checkin/stat'), true);
-            if((int)date('Ymd') > (int)$checkinData['date']) {
-                $checkinData['date'] = date('Ymd');
-                $checkinData['checked'] = 0;
-            }
-            $checkinData['checked'] += 1;
-            setData('checkin/stat', json_encode($checkinData));
+            $checkinData = increaseCheckinCount();
 
             // 被外星人抓走的概率
             $currentHour = date('G'); // 获取当前的小时 (0 - 23)
@@ -110,6 +99,7 @@ switch(getStatus($User_id)) {
             } else if($currentHour >= 20 || $currentHour < 6) {
                 $abductionProbability = 1; // 1%
             }
+
             // 判断是否被抓走
             if(rand(1, 100) <= $abductionProbability) {
                 $data = getAttackData($Event['user_id']);
@@ -142,13 +132,12 @@ switch(getStatus($User_id)) {
                 $today = date('md') == '0101' ? '今年' : '今天';
                 $reply .= "\n你是{$today}第 {$checkinData['checked']} 个{$word}的～";
             }
-                        delData('checkin/'.$Event['user_id']);
-            delData('checkinMeta/'.$Event['user_id']);
-            setData('checkin/'.$Event['user_id'], '');
-            setData('checkinMeta/'.$Event['user_id'], (string)time());
+
+            setCheckinLastTimestamp($Event['user_id'], time());
         }
         break;
 }
 
 $Queue[] = replyMessage($reply);
+
 

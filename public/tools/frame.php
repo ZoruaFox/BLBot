@@ -105,7 +105,28 @@ function getMongoCooldownCollection(bool $strict = false) {
     return $collection;
 }
 
+function getMongoCheckinCollection(bool $strict = false) {
+    global $Database;
+    static $collection = null;
+
+    if($collection !== null) return $collection;
+
+    if(!isset($Database)) {
+        if($strict) {
+            throw new \RuntimeException('MongoDB 连接未初始化，无法访问 checkin 持久化后端。');
+        }
+        return null;
+    }
+
+    $collectionName = trim((string)config('mongoCheckinCollection', 'checkins'));
+    if($collectionName === '') $collectionName = 'checkins';
+
+    $collection = $Database->$collectionName;
+    return $collection;
+}
+
 function getMongoPrimaryReadPreference(): \MongoDB\Driver\ReadPreference {
+
     static $readPreference = null;
     if($readPreference !== null) return $readPreference;
 
@@ -145,9 +166,15 @@ function mongoValueToTimestamp($value): int {
     return 0;
 }
 
+function logPersistenceWarning(string $scope, string $message): void {
+    $line = date('Y-m-d H:i:s')." [persistence][{$scope}] {$message}\n";
+    @file_put_contents('../storage/data/error.log', $line, FILE_APPEND);
+}
+
 function ensureMongoPersistenceReady(): void {
     static $checked = false;
     if($checked || getDataBackend() !== 'mongo') return;
+
 
     global $Database;
     if(!isset($Database)) {
@@ -205,17 +232,53 @@ function ensureMongoPersistenceReady(): void {
         getMongoOperationOptions(['projection' => ['set_at' => 1]]),
     );
 
-    $cooldownProbeReadAt = mongoValueToTimestamp($cooldownProbeDoc['set_at'] ?? null);
+        $cooldownProbeReadAt = mongoValueToTimestamp($cooldownProbeDoc['set_at'] ?? null);
+
+
     if(!$cooldownProbeDoc || abs($cooldownProbeReadAt - $cooldownProbeSetAt) > 1) {
         throw new \RuntimeException('MongoDB cooldown 持久化自检失败：探针数据读取不一致。');
+    }
+
+    if(configBool('enableCheckinCollection', false)) {
+        $checkinCollection = getMongoCheckinCollection(true);
+        $checkinCollection->createIndex(['user_id' => 1], ['background' => true]);
+        $checkinCollection->createIndex(['last_checkin_at' => 1], ['background' => true]);
+        $checkinCollection->createIndex(['updated_at' => 1], ['background' => true]);
+
+        $checkinProbeKey = '__blbot/system/checkin_probe';
+        $checkinProbeAt = time();
+        $checkinProbeWriteResult = $checkinCollection->updateOne(
+            ['_id' => $checkinProbeKey],
+            ['$set' => [
+                'type' => 'probe',
+                'user_id' => '__probe__',
+                'last_checkin_at' => mongoUtcDateTimeFromTimestamp($checkinProbeAt),
+                'updated_at' => new \MongoDB\BSON\UTCDateTime(),
+            ]],
+            getMongoOperationOptions(['upsert' => true]),
+        );
+
+        if(!$checkinProbeWriteResult->isAcknowledged()) {
+            throw new \RuntimeException('MongoDB checkin 持久化自检失败：写入探针未被确认。');
+        }
+
+        $checkinProbeDoc = $checkinCollection->findOne(
+            ['_id' => $checkinProbeKey],
+            getMongoOperationOptions(['projection' => ['last_checkin_at' => 1]]),
+        );
+
+        $checkinProbeReadAt = mongoValueToTimestamp($checkinProbeDoc['last_checkin_at'] ?? null);
+        if(!$checkinProbeDoc || abs($checkinProbeReadAt - $checkinProbeAt) > 1) {
+            throw new \RuntimeException('MongoDB checkin 持久化自检失败：探针数据读取不一致。');
+        }
     }
 
     $checked = true;
 }
 
-
 function mongoSetCooldown(string $name, int $duration, int $setAt): bool {
     $collection = getMongoCooldownCollection(true);
+
 
     $result = $collection->updateOne(
         ['_id' => $name],
@@ -295,9 +358,286 @@ function mongoGetCooldown(string $name): ?array {
     return migrateLegacyCooldownFromKvStore($name);
 }
 
+function useCheckinCollection(): bool {
+    return getDataBackend() === 'mongo' && configBool('enableCheckinCollection', false);
+}
+
+function checkinCollectionDualWriteEnabled(): bool {
+    return configBool('checkinCollectionDualWrite', true);
+}
+
+function getCheckinUserDocId(string $userId): string {
+    return 'user:'.$userId;
+}
+
+function getCheckinStatDocId(): string {
+    return 'stat';
+}
+
+function normalizeCheckinStat(array $stat, ?int $timestamp = null): array {
+    $referenceTime = $timestamp ?? time();
+    $today = date('Ymd', $referenceTime);
+
+    $date = (string)($stat['date'] ?? '');
+    if(!preg_match('/^\d{8}$/', $date)) {
+        $date = $today;
+    }
+
+    $checked = max(0, (int)($stat['checked'] ?? 0));
+
+    return [
+        'date' => $date,
+        'checked' => $checked,
+    ];
+}
+
+function getLegacyCheckinLastTimestamp(string $userId): int {
+    clearstatcache();
+
+    $checkinMeta = getData('checkinMeta/'.$userId);
+    $lastCheckinTime = $checkinMeta ? (int)$checkinMeta : 0;
+
+    if($lastCheckinTime <= 0 && getDataBackend() === 'file') {
+        $checkinFilePath = '../storage/data/checkin/'.$userId;
+        $lastCheckinTime = file_exists($checkinFilePath) ? filemtime($checkinFilePath) : 0;
+    }
+
+    return max(0, $lastCheckinTime);
+}
+
+function setLegacyCheckinLastTimestamp(string $userId, int $timestamp): void {
+    delData('checkin/'.$userId);
+    delData('checkinMeta/'.$userId);
+    setData('checkin/'.$userId, '');
+    setData('checkinMeta/'.$userId, (string)$timestamp);
+}
+
+function getLegacyCheckinStat(): array {
+    $raw = getData('checkin/stat');
+    $decoded = [];
+
+    if($raw !== false && $raw !== '') {
+        $parsed = json_decode($raw, true);
+        if(is_array($parsed)) {
+            $decoded = $parsed;
+        }
+    }
+
+    return normalizeCheckinStat($decoded);
+}
+
+function setLegacyCheckinStat(array $stat): void {
+    $normalized = normalizeCheckinStat($stat);
+    setData('checkin/stat', json_encode($normalized, JSON_UNESCAPED_UNICODE));
+}
+
+function mongoSetCheckinLastTimestamp(string $userId, int $timestamp): bool {
+    $collection = getMongoCheckinCollection(true);
+    $docId = getCheckinUserDocId($userId);
+
+    $result = $collection->updateOne(
+        ['_id' => $docId],
+        [
+            '$set' => [
+                'user_id' => $userId,
+                'last_checkin_at' => mongoUtcDateTimeFromTimestamp($timestamp),
+                'updated_at' => new \MongoDB\BSON\UTCDateTime(),
+            ],
+            '$setOnInsert' => ['_id' => $docId],
+        ],
+        getMongoOperationOptions(['upsert' => true]),
+    );
+
+    return $result->isAcknowledged();
+}
+
+function mongoGetCheckinLastTimestamp(string $userId): int {
+    $collection = getMongoCheckinCollection(true);
+    $docId = getCheckinUserDocId($userId);
+
+    $doc = $collection->findOne(
+        ['_id' => $docId],
+        getMongoOperationOptions(['projection' => ['last_checkin_at' => 1, 'updated_at' => 1]]),
+    );
+
+    if(!$doc) {
+        $legacyDoc = $collection->findOne(
+            ['user_id' => $userId],
+            getMongoOperationOptions([
+                'sort' => ['updated_at' => -1],
+                'projection' => ['_id' => 1, 'last_checkin_at' => 1, 'updated_at' => 1],
+            ]),
+        );
+
+        if($legacyDoc) {
+            $legacyTimestamp = mongoValueToTimestamp($legacyDoc['last_checkin_at'] ?? null);
+            if($legacyTimestamp <= 0) {
+                $legacyTimestamp = mongoValueToTimestamp($legacyDoc['updated_at'] ?? null);
+            }
+
+            if($legacyTimestamp > 0) {
+                mongoSetCheckinLastTimestamp($userId, $legacyTimestamp);
+                return $legacyTimestamp;
+            }
+        }
+
+        return 0;
+    }
+
+    $timestamp = mongoValueToTimestamp($doc['last_checkin_at'] ?? null);
+    if($timestamp <= 0) {
+        $timestamp = mongoValueToTimestamp($doc['updated_at'] ?? null);
+    }
+
+    return max(0, $timestamp);
+}
+
+function mongoSetCheckinStat(array $stat): bool {
+    $collection = getMongoCheckinCollection(true);
+    $docId = getCheckinStatDocId();
+    $normalized = normalizeCheckinStat($stat);
+
+    $result = $collection->updateOne(
+        ['_id' => $docId],
+        [
+            '$set' => [
+                'type' => 'stat',
+                'date' => $normalized['date'],
+                'checked' => (int)$normalized['checked'],
+                'updated_at' => new \MongoDB\BSON\UTCDateTime(),
+            ],
+            '$setOnInsert' => ['_id' => $docId],
+        ],
+        getMongoOperationOptions(['upsert' => true]),
+    );
+
+    return $result->isAcknowledged();
+}
+
+function mongoGetCheckinStat(): array {
+    $collection = getMongoCheckinCollection(true);
+
+    $doc = $collection->findOne(
+        ['_id' => getCheckinStatDocId()],
+        getMongoOperationOptions(['projection' => ['date' => 1, 'checked' => 1]]),
+    );
+
+    if($doc && is_array($doc)) {
+        return normalizeCheckinStat($doc);
+    }
+
+    $legacy = getLegacyCheckinStat();
+    if(!mongoSetCheckinStat($legacy)) {
+        throw new \RuntimeException('MongoDB checkin/stat 迁移失败：写入新集合未被确认。');
+    }
+
+    return $legacy;
+}
+
+function getCheckinLastTimestamp($userId): int {
+    $userId = (string)$userId;
+
+    if(!useCheckinCollection()) {
+        return getLegacyCheckinLastTimestamp($userId);
+    }
+
+    try {
+        $lastCheckinTime = mongoGetCheckinLastTimestamp($userId);
+        if($lastCheckinTime > 0) {
+            return $lastCheckinTime;
+        }
+
+        $legacyCheckinTime = getLegacyCheckinLastTimestamp($userId);
+        if($legacyCheckinTime > 0 && !mongoSetCheckinLastTimestamp($userId, $legacyCheckinTime)) {
+            throw new \RuntimeException("MongoDB checkin 用户迁移失败：{$userId}");
+        }
+
+        return $legacyCheckinTime;
+    } catch(\Throwable $e) {
+        logPersistenceWarning('checkin-read', $e->getMessage().' @ '.$e->getFile().':'.$e->getLine());
+        return getLegacyCheckinLastTimestamp($userId);
+    }
+}
+
+function setCheckinLastTimestamp($userId, int $timestamp): void {
+    $userId = (string)$userId;
+    $timestamp = max(0, $timestamp);
+
+    if(!useCheckinCollection()) {
+        setLegacyCheckinLastTimestamp($userId, $timestamp);
+        return;
+    }
+
+    try {
+        if(!mongoSetCheckinLastTimestamp($userId, $timestamp)) {
+            throw new \RuntimeException("MongoDB checkin 写入失败：{$userId}");
+        }
+
+        if(checkinCollectionDualWriteEnabled()) {
+            setLegacyCheckinLastTimestamp($userId, $timestamp);
+        }
+    } catch(\Throwable $e) {
+        logPersistenceWarning('checkin-write', $e->getMessage().' @ '.$e->getFile().':'.$e->getLine());
+        setLegacyCheckinLastTimestamp($userId, $timestamp);
+    }
+}
+
+function getCheckinStat(): array {
+    if(!useCheckinCollection()) {
+        return getLegacyCheckinStat();
+    }
+
+    try {
+        return mongoGetCheckinStat();
+    } catch(\Throwable $e) {
+        logPersistenceWarning('checkin-stat-read', $e->getMessage().' @ '.$e->getFile().':'.$e->getLine());
+        return getLegacyCheckinStat();
+    }
+}
+
+function setCheckinStat(array $stat): void {
+    $normalized = normalizeCheckinStat($stat);
+
+    if(!useCheckinCollection()) {
+        setLegacyCheckinStat($normalized);
+        return;
+    }
+
+    try {
+        if(!mongoSetCheckinStat($normalized)) {
+            throw new \RuntimeException('MongoDB checkin/stat 写入失败。');
+        }
+
+        if(checkinCollectionDualWriteEnabled()) {
+            setLegacyCheckinStat($normalized);
+        }
+    } catch(\Throwable $e) {
+        logPersistenceWarning('checkin-stat-write', $e->getMessage().' @ '.$e->getFile().':'.$e->getLine());
+        setLegacyCheckinStat($normalized);
+    }
+}
+
+function increaseCheckinCount(?int $timestamp = null): array {
+    $timestamp = $timestamp ?? time();
+    $today = date('Ymd', $timestamp);
+
+    $stat = getCheckinStat();
+    if((int)$today > (int)$stat['date']) {
+        $stat['date'] = $today;
+        $stat['checked'] = 0;
+    }
+
+    $stat['checked'] += 1;
+    setCheckinStat($stat);
+
+    return normalizeCheckinStat($stat, $timestamp);
+}
+
 
 function normalizeStoredDataValue($data): string {
     if(is_string($data)) return $data;
+
+
     if(is_scalar($data) || $data === null) return (string)$data;
 
     $encoded = json_encode($data, JSON_UNESCAPED_UNICODE);

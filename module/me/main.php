@@ -43,6 +43,7 @@ if($Event['user_id'] == $QQ) {
         $msg .= "\n再签到 ".($nextLvl['exp'] - $exp)." 天即可升级 Lv{$nextLvl['lvl']}～";
     }
 }
+
 switch($status) {
     case 'imprisoned':
         $msg .= "\n当前身处监狱中，预计 {$statusEnd} 出狱";
@@ -68,17 +69,14 @@ switch($status) {
         }
         $msg .= "\n你被外星人{$randomParts}了。";
         break;
-        case 'free':
-        $checkinMeta = getData('checkinMeta/'.$QQ);
-        $lastCheckinTime = $checkinMeta ? (int)$checkinMeta : 0;
-        if($lastCheckinTime <= 0 && getDataBackend() === 'file') {
-            $checkinFilePath = '../storage/data/checkin/'.$QQ;
-            $lastCheckinTime = file_exists($checkinFilePath) ? filemtime($checkinFilePath) : 0;
-        }
+    case 'free':
+        $lastCheckinTime = getCheckinLastTimestamp($QQ);
         if($lastCheckinTime == 0 || intval(date('Ymd')) - intval(date('Ymd', $lastCheckinTime)) > 0) {
             $msg .= "\n今天还没有签到哦～";
         }
-    default: break;
+        break;
+    default:
+        break;
 }
 
 if($Event['user_id'] != $QQ) {
@@ -95,3 +93,4 @@ if($motto) {
 }
 
 $Queue[] = replyMessage($msg);
+
