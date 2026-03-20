@@ -35,6 +35,47 @@ $memoryCache_getData = [];
 $memoryCache_config = [];
 
 /**
+ * 将配置值转换为布尔值
+ */
+function configBool(string $key, bool $defaultValue = false): bool {
+    $value = config($key, $defaultValue);
+    if(is_bool($value)) return $value;
+    if(is_int($value)) return $value !== 0;
+    if(is_string($value)) {
+        $normalized = strtolower(trim($value));
+        if(in_array($normalized, ['1', 'true', 'yes', 'on'], true)) return true;
+        if(in_array($normalized, ['0', 'false', 'no', 'off', ''], true)) return false;
+    }
+    return (bool)$value;
+}
+
+/**
+ * APCu 数据缓存是否可用
+ */
+function useApcuDataCache(): bool {
+    static $available = null;
+    if($available !== null) return $available;
+
+    $enabledByConfig = configBool('enableApcuDataCache', true);
+    $hasFunctions = function_exists('apcu_fetch') && function_exists('apcu_store') && function_exists('apcu_delete');
+    $apcEnabled = configBool('apc.enabled', true);
+    $apcCliEnabled = PHP_SAPI !== 'cli' || configBool('apc.enable_cli', false);
+
+    $available = $enabledByConfig && $hasFunctions && $apcEnabled && $apcCliEnabled;
+    return $available;
+}
+
+function getApcuDataCacheTtl(): int {
+    $ttl = (int)config('apcuDataCacheTtl', 0);
+    return max(0, $ttl);
+}
+
+function getApcuDataCacheKey(string $filePath): string {
+    return 'blbot:data:'.sha1($filePath);
+}
+
+
+/**
  * 读取配置文件
  * @param string $kay 键值
  * @param string $defaultValue 默认值
@@ -139,18 +180,35 @@ function setData(string $filePath, $data, bool $pending = false) {
     } else {
         unset($memoryCache_getData[$filePath]); // Invalidate cache on append
     }
+
+    if(useApcuDataCache()) {
+        $cacheKey = getApcuDataCacheKey($filePath);
+        if(!$pending) {
+            apcu_store($cacheKey, $data, getApcuDataCacheTtl());
+        } else {
+            apcu_delete($cacheKey);
+        }
+    }
+
     if(!is_dir(dirname('../storage/data/'.$filePath))) {
         @mkdir(dirname('../storage/data/'.$filePath), 0777, true);
     }
     return file_put_contents('../storage/data/'.$filePath, $data, $pending ? (FILE_APPEND | LOCK_EX) : LOCK_EX);
 }
 
+
 function delData(string $filePath) {
     global $memoryCache_getData;
     unset($memoryCache_getData[$filePath]);
+
+    if(useApcuDataCache()) {
+        apcu_delete(getApcuDataCacheKey($filePath));
+    }
+
     if(!file_exists('../storage/data/'.$filePath)) return true;
     return unlink('../storage/data/'.$filePath);
 }
+
 
 /**
  * 读取数据
@@ -161,11 +219,32 @@ function getData(string $filePath) {
     global $memoryCache_getData;
     if(isset($memoryCache_getData[$filePath])) return $memoryCache_getData[$filePath];
 
-    if(!file_exists('../storage/data/'.$filePath)) return false;
+    if(useApcuDataCache()) {
+        $cacheKey = getApcuDataCacheKey($filePath);
+        $cached = apcu_fetch($cacheKey, $hit);
+        if($hit) {
+            $memoryCache_getData[$filePath] = $cached;
+            return $cached;
+        }
+    }
+
+    if(!file_exists('../storage/data/'.$filePath)) {
+        if(useApcuDataCache()) {
+            apcu_delete(getApcuDataCacheKey($filePath));
+        }
+        return false;
+    }
+
     $data = file_get_contents('../storage/data/'.$filePath);
     $memoryCache_getData[$filePath] = $data;
+
+    if(useApcuDataCache()) {
+        apcu_store(getApcuDataCacheKey($filePath), $data, getApcuDataCacheTtl());
+    }
+
     return $data;
 }
+
 
 function getDataPath(string $filePath) {
     return '../storage/data/'.$filePath;

@@ -1,4 +1,4 @@
-;不懂的就别动了
+;的就别动了
 API="127.0.0.1:5700"
 token=
 ;数据库凭据
@@ -21,6 +21,13 @@ addFriendMsg="BLBot 已经是你的好友啦，发送 #help 查看帮助～"
 addGroupMsg="欢迎加入本群，我是 BLBot，发送 #help 查看帮助～"
 ;头像缓存时长
 avatarCacheTime=86400
+
+;==== PHP 缓存配置（可选） ====
+;是否启用 APCu 作为 getData/setData 的共享缓存后端（需要安装并启用 APCu 扩展）
+enableApcuDataCache=true
+;APCu 键的 TTL（秒），0 表示不过期
+apcuDataCacheTtl=0
+
 ;调试选项
 DEBUG=false
 DebugListen=

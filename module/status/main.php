@@ -41,21 +41,29 @@ Disk: {$usedDisk}/{$totalDisk} ({$usedDiskPercent})
 Up:   {$uptime['text']}
 EOT;
 
-$opcache = opcache_get_status(false);
-if(is_array($opcache)){
-    $opcStatus = $opcache['opcache_statistics'];
-    $opcMemWasteRate = sprintf('%.2f%%', $opcache['memory_usage']['current_wasted_percentage']*100);
-    $opcHitRate = sprintf('%.2f%%', $opcStatus['opcache_hit_rate']);
-    $msg.=<<<EOT
+if(function_exists('opcache_get_status')) {
+    $opcache = @opcache_get_status(false);
+    if(is_array($opcache) && !empty($opcache['opcache_enabled']) && isset($opcache['opcache_statistics'], $opcache['memory_usage'])) {
+        $opcStatus = $opcache['opcache_statistics'];
+        $opcMemWasteRate = sprintf('%.2f%%', (($opcache['memory_usage']['current_wasted_percentage'] ?? 0) * 100));
+        $opcHitRate = sprintf('%.2f%%', ($opcStatus['opcache_hit_rate'] ?? 0));
+        $msg .= <<<EOT
 
 
 [OPcache]
+Status: enabled
 Mem Waste Rate: {$opcMemWasteRate}
 Cached/Max: ({$opcStatus['num_cached_scripts']}){$opcStatus['num_cached_keys']}/{$opcStatus['max_cached_keys']}
 Hits/Miss: {$opcStatus['hits']}/{$opcStatus['misses']} ({$opcHitRate})
 Restart(OOM Hash): {$opcStatus['oom_restarts']} {$opcStatus['hash_restarts']}
 EOT;
+    } else {
+        $msg .= "\n\n[OPcache]\nStatus: extension loaded but disabled";
+    }
+} else {
+    $msg .= "\n\n[OPcache]\nStatus: extension not available";
 }
+
 
 $Queue[]= sendBack($msg);
 
