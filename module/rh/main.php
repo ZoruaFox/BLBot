@@ -199,8 +199,11 @@ function joinGame() {
     loadModule('credit.tools');
     requireLvl(1, '加入赛马');
 
-    // 检查赛马场
+        // 检查赛马场
     $rhData = json_decode(getData('rh/group/'.$Event['group_id']), true);
+    if(!is_array($rhData) || ($rhData['status'] ?? '') !== 'starting' || !isset($rhData['players']) || !is_array($rhData['players']) || !isset($rhData['horse'])) {
+        replyAndLeave('赛马场状态已刷新，请重新发起 #rh ～');
+    }
     $horse = $rhData['horse'];
     if(in_array($Event['user_id'], $rhData['players'])) {
         replyAndLeave('你的'.$horse.'已经加入赛场咯～', false);
@@ -251,25 +254,30 @@ function countDownGame($time) {
     // 看看人数够不够
     // 为了防止 getData 缓存，需要重置一下缓存
     global $memoryCache_getData;
-    unset($memoryCache_getData['rh/group/'.$Event['group_id']]);
+        unset($memoryCache_getData['rh/group/'.$Event['group_id']]);
     $rhData = json_decode(getData('rh/group/'.$Event['group_id']), true);
-    if($time === 0 && count($rhData['players']) <= 3) {
+    if(!is_array($rhData) || !isset($rhData['players']) || !is_array($rhData['players'])) {
+        leave('赛马场状态已变更，本场倒计时取消。');
+    }
+    $players = $rhData['players'];
+    if($time === 0 && count($players) <= 3) {
         // 延迟一分钟
         re('参与赛'.$assets['h'].'的人数太少了，本场赛'.$assets['h'].'延迟一分钟开始～还有60秒～');
         countDownGame(1);
         return;
-        } else if($time !== 0 && count($rhData['players']) <= 1) {
+                } else if($time !== 0 && count($players) <= 1) {
         $entryFee = rhEntryFee();
-        $onlyPlayer = $rhData['players'][0] ?? $Event['user_id'];
+        $onlyPlayer = $players[0] ?? $Event['user_id'];
         addCredit($onlyPlayer, $entryFee);
         unlockHorse($onlyPlayer);
         le('你'.$assets['h'].'的，场上还是只有一匹'.$assets['h'].'，没法赛'.$assets['h'].'了呢\n已退还入场费 '.$entryFee.' 金币～', false);
     } else {
-        setData('rh/group/'.$Event['group_id'], json_encode(['status' => 'started', 'players' => $rhData['players'], 'time' => time()]));
-        if(count($rhData['players']) <= 3 || !rand(0, 9)) {
+                setData('rh/group/'.$Event['group_id'], json_encode(['status' => 'started', 'players' => $players, 'time' => time()]));
+        if(count($players) <= 3 || !rand(0, 9)) {
             re('Bot 偷偷加入了赛'.$assets['h'].'～');
-            $rhData['players'][] = config('bot');
+            $players[] = config('bot');
         }
+        $rhData['players'] = $players;
         startGame($rhData);
     }
 }
@@ -282,8 +290,11 @@ function startGame($rhData): never {
 
     global $Event, $assets;
     global $horses;
-    $players = $rhData['players'];
+        $players = (isset($rhData['players']) && is_array($rhData['players'])) ? $rhData['players'] : [];
     $playersCount = count($players);
+    if($playersCount <= 0) {
+        le('赛马场状态异常，本场取消。', false);
+    }
     $horses = [];
     $deadHorse = [];
     $aliveHorse = range(0, $playersCount - 1);

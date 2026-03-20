@@ -30,13 +30,17 @@ if($rhData) {
 coolDown('rh/group/'.$Event['group_id'], 0);
 coolDown('rh/user/'.$Event['user_id'], 0);
 
+// 开启本群本场次 force 标记：允许后续参与者无视马匹休息冷却加入
+// 预留 5 分钟覆盖倒计时及可能的延迟开赛；赛局结束会在 le() 中清理
+setData('rh/force/group/'.$Event['group_id'], strval(time() + 300));
+
 // 同步清除本场参与者（若有记录）的马匹冷却与锁定，避免冲突残留
 foreach($rhPlayers as $player) {
     coolDown('rh/user/'.$player, 0);
     delData('rh/lock/'.$player);
 }
 
-sendBackImmediately('[CQ:reply,id='.$Event['message_id'].']【Force】已强制覆写赛马冷却，正在按正常流程开场…');
+sendBackImmediately('[CQ:reply,id='.$Event['message_id'].']【Force】已强制覆写赛马冷却（含本场后续参赛者），正在按正常流程开场…');
 
 // 直接开始赛马流程（仍保留金币、锁定、人数等常规校验）
 loadModule('rh');
