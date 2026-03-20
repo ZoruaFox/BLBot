@@ -2,9 +2,15 @@
 
 if(function_exists('fastcgi_finish_request')) fastcgi_finish_request();
 
-require('init.php');
+try {
+    require('init.php');
+} catch (\Throwable $e) {
+    @file_put_contents('../storage/data/error.log', date('Y-m-d H:i:s')." [bootstrap] ".$e->getMessage()." @ ".$e->getFile().':'.$e->getLine()."\n", FILE_APPEND);
+    http_response_code(500);
+    exit;
+}
 
-use kjBot\Frame\Message;
+
 
 try {
     $listen = config('Listen');
