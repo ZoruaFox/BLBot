@@ -1,7 +1,11 @@
 <?php
 
 /**
- * 将 storage/data 中的文件数据迁移到 MongoDB kv 存储。
+ * 将 storage/data 中的文件迁移到 MongoDB。
+ *
+ * 说明：
+ * - 常规键值数据 => kv_store（或 mongoDataCollection）
+ * - coolDown / coolDownMeta => cooldowns（或 mongoCooldownCollection）
  *
  * 用法：
  * php migrate_data_to_mongo.php
@@ -24,8 +28,10 @@ if($config === false) {
 $dbPort = $config['dbPort'] ?? 27017;
 $dbUsername = $config['dbUsername'] ?? null;
 $dbPassword = $config['dbPassword'] ?? null;
-$collectionName = trim((string)($config['mongoDataCollection'] ?? 'kv_store'));
-if($collectionName === '') $collectionName = 'kv_store';
+$kvCollectionName = trim((string)($config['mongoDataCollection'] ?? 'kv_store'));
+if($kvCollectionName === '') $kvCollectionName = 'kv_store';
+$cooldownCollectionName = trim((string)($config['mongoCooldownCollection'] ?? 'cooldowns'));
+if($cooldownCollectionName === '') $cooldownCollectionName = 'cooldowns';
 
 $client = new MongoDB\Client('mongodb://localhost:'.$dbPort, [
     'appName' => 'BLBotMigration',
@@ -34,7 +40,12 @@ $client = new MongoDB\Client('mongodb://localhost:'.$dbPort, [
     'authSource' => 'BLBot',
 ]);
 $db = $client->selectDatabase('BLBot', ['typeMap' => ['array' => 'array', 'document' => 'array', 'root' => 'array']]);
-$collection = $db->$collectionName;
+$kvCollection = $db->$kvCollectionName;
+$cooldownCollection = $db->$cooldownCollectionName;
+
+$kvCollection->createIndex(['updated_at' => 1], ['background' => true]);
+$cooldownCollection->createIndex(['set_at' => 1], ['background' => true]);
+$cooldownCollection->createIndex(['updated_at' => 1], ['background' => true]);
 
 $dataRoot = __DIR__.'/storage/data';
 if(!is_dir($dataRoot)) {
@@ -47,9 +58,17 @@ $iterator = new RecursiveIteratorIterator(
     RecursiveIteratorIterator::LEAVES_ONLY,
 );
 
-$total = 0;
-$success = 0;
-$failed = 0;
+$stats = [
+    'total_files' => 0,
+    'kv_success' => 0,
+    'kv_failed' => 0,
+    'cooldown_files' => 0,
+    'cooldown_success' => 0,
+    'cooldown_failed' => 0,
+];
+
+$cooldownDurations = [];
+$cooldownMeta = [];
 
 foreach($iterator as $fileInfo) {
     if(!$fileInfo->isFile()) continue;
@@ -57,40 +76,107 @@ foreach($iterator as $fileInfo) {
     $absolutePath = $fileInfo->getPathname();
     $relative = substr($absolutePath, strlen($dataRoot) + 1);
     $relative = str_replace('\\', '/', $relative);
+    $stats['total_files']++;
 
     $content = @file_get_contents($absolutePath);
     if($content === false) {
         fwrite(STDERR, "读取失败: {$relative}\n");
-        $failed++;
-        $total++;
+        $stats['kv_failed']++;
         continue;
     }
 
     $mtime = $fileInfo->getMTime();
-    $utc = new MongoDB\BSON\UTCDateTime($mtime * 1000);
+
+    if(str_starts_with($relative, 'coolDown/')) {
+        $name = substr($relative, strlen('coolDown/'));
+        if($name !== '') {
+            $cooldownDurations[$name] = [
+                'duration' => (int)$content,
+                'updated_at' => $mtime,
+            ];
+            $stats['cooldown_files']++;
+        }
+        continue;
+    }
+
+    if(str_starts_with($relative, 'coolDownMeta/')) {
+        $name = substr($relative, strlen('coolDownMeta/'));
+        if($name !== '') {
+            $setAt = (int)$content;
+            if($setAt <= 0) $setAt = $mtime;
+
+            $cooldownMeta[$name] = [
+                'set_at' => $setAt,
+                'updated_at' => $mtime,
+            ];
+            $stats['cooldown_files']++;
+        }
+        continue;
+    }
 
     try {
-        $result = $collection->updateOne(
+        $result = $kvCollection->updateOne(
             ['_id' => $relative],
-            ['$set' => ['value' => $content, 'updated_at' => $utc]],
+            ['$set' => ['value' => $content, 'updated_at' => new MongoDB\BSON\UTCDateTime($mtime * 1000)]],
             ['upsert' => true],
         );
 
         if($result->isAcknowledged()) {
-            $success++;
+            $stats['kv_success']++;
         } else {
-            fwrite(STDERR, "写入未确认: {$relative}\n");
-            $failed++;
+            fwrite(STDERR, "KV 写入未确认: {$relative}\n");
+            $stats['kv_failed']++;
         }
     } catch(Throwable $e) {
-        fwrite(STDERR, "写入失败: {$relative} => {$e->getMessage()}\n");
-        $failed++;
+        fwrite(STDERR, "KV 写入失败: {$relative} => {$e->getMessage()}\n");
+        $stats['kv_failed']++;
     }
-
-    $total++;
 }
 
-echo "迁移完成：总计 {$total}，成功 {$success}，失败 {$failed}\n";
-if($failed > 0) {
+$allCooldownNames = array_values(array_unique(array_merge(array_keys($cooldownDurations), array_keys($cooldownMeta))));
+foreach($allCooldownNames as $name) {
+    $duration = (int)($cooldownDurations[$name]['duration'] ?? 0);
+    $setAt = (int)($cooldownMeta[$name]['set_at'] ?? 0);
+
+    if($setAt <= 0) {
+        $setAt = (int)($cooldownDurations[$name]['updated_at'] ?? 0);
+    }
+    if($setAt <= 0) {
+        $setAt = (int)($cooldownMeta[$name]['updated_at'] ?? 0);
+    }
+    if($setAt <= 0) {
+        $setAt = time();
+    }
+
+    try {
+        $result = $cooldownCollection->updateOne(
+            ['_id' => $name],
+            ['$set' => [
+                'duration' => $duration,
+                'set_at' => new MongoDB\BSON\UTCDateTime($setAt * 1000),
+                'updated_at' => new MongoDB\BSON\UTCDateTime(),
+            ]],
+            ['upsert' => true],
+        );
+
+        if($result->isAcknowledged()) {
+            $stats['cooldown_success']++;
+        } else {
+            fwrite(STDERR, "Cooldown 写入未确认: {$name}\n");
+            $stats['cooldown_failed']++;
+        }
+    } catch(Throwable $e) {
+        fwrite(STDERR, "Cooldown 写入失败: {$name} => {$e->getMessage()}\n");
+        $stats['cooldown_failed']++;
+    }
+}
+
+echo "迁移完成\n";
+echo "- 扫描文件数: {$stats['total_files']}\n";
+echo "- KV 成功: {$stats['kv_success']}，失败: {$stats['kv_failed']}\n";
+echo "- Cooldown 文件识别数: {$stats['cooldown_files']}\n";
+echo "- Cooldown 成功: {$stats['cooldown_success']}，失败: {$stats['cooldown_failed']}\n";
+
+if($stats['kv_failed'] > 0 || $stats['cooldown_failed'] > 0) {
     exit(2);
 }

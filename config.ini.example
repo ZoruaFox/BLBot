@@ -25,8 +25,10 @@ avatarCacheTime=86400
 ;==== 数据持久化后端配置 ====
 ;持久化后端：file 或 mongo。建议生产使用 mongo（单一持久化真源）
 dataBackend="file"
-;MongoDB 中用于 getData/setData 键值存储的集合名
+;MongoDB 中用于 getData/setData 键值存储的集合名（仅兼容过渡层）
 mongoDataCollection="kv_store"
+;MongoDB 中用于 coolDown 的专用集合（P1 已落地）
+mongoCooldownCollection="cooldowns"
 
 ;==== PHP 缓存配置（可选） ====
 ;是否启用 APCu 作为 getData/setData 的共享缓存后端（需要安装并启用 APCu 扩展）

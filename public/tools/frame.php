@@ -85,6 +85,26 @@ function getMongoDataCollection(bool $strict = false) {
     return $collection;
 }
 
+function getMongoCooldownCollection(bool $strict = false) {
+    global $Database;
+    static $collection = null;
+
+    if($collection !== null) return $collection;
+
+    if(!isset($Database)) {
+        if($strict) {
+            throw new \RuntimeException('MongoDB 连接未初始化，无法访问 cooldown 持久化后端。');
+        }
+        return null;
+    }
+
+    $collectionName = trim((string)config('mongoCooldownCollection', 'cooldowns'));
+    if($collectionName === '') $collectionName = 'cooldowns';
+
+    $collection = $Database->$collectionName;
+    return $collection;
+}
+
 function getMongoPrimaryReadPreference(): \MongoDB\Driver\ReadPreference {
     static $readPreference = null;
     if($readPreference !== null) return $readPreference;
@@ -105,6 +125,26 @@ function getMongoOperationOptions(array $options = []): array {
     return $options;
 }
 
+function mongoUtcDateTimeFromTimestamp(int $timestamp): \MongoDB\BSON\UTCDateTime {
+    return new \MongoDB\BSON\UTCDateTime($timestamp * 1000);
+}
+
+function mongoValueToTimestamp($value): int {
+    if($value instanceof \MongoDB\BSON\UTCDateTime) {
+        return (int)$value->toDateTime()->format('U');
+    }
+
+    if($value instanceof \DateTimeInterface) {
+        return (int)$value->format('U');
+    }
+
+    if(is_numeric($value)) {
+        return (int)$value;
+    }
+
+    return 0;
+}
+
 function ensureMongoPersistenceReady(): void {
     static $checked = false;
     if($checked || getDataBackend() !== 'mongo') return;
@@ -116,12 +156,12 @@ function ensureMongoPersistenceReady(): void {
 
     $Database->command(['ping' => 1], getMongoOperationOptions());
 
-    $collection = getMongoDataCollection(true);
-    $collection->createIndex(['updated_at' => 1], ['background' => true]);
+    $kvCollection = getMongoDataCollection(true);
+    $kvCollection->createIndex(['updated_at' => 1], ['background' => true]);
 
     $probeKey = '__blbot/system/persistence_probe';
     $probeValue = (string)time();
-    $writeResult = $collection->updateOne(
+    $writeResult = $kvCollection->updateOne(
         ['_id' => $probeKey],
         ['$set' => ['value' => $probeValue, 'updated_at' => new \MongoDB\BSON\UTCDateTime()]],
         getMongoOperationOptions(['upsert' => true]),
@@ -131,7 +171,7 @@ function ensureMongoPersistenceReady(): void {
         throw new \RuntimeException('MongoDB 持久化自检失败：写入探针未被确认。');
     }
 
-    $probeDoc = $collection->findOne(
+    $probeDoc = $kvCollection->findOne(
         ['_id' => $probeKey],
         getMongoOperationOptions(['projection' => ['value' => 1]]),
     );
@@ -140,9 +180,120 @@ function ensureMongoPersistenceReady(): void {
         throw new \RuntimeException('MongoDB 持久化自检失败：探针数据读取不一致。');
     }
 
+    $cooldownCollection = getMongoCooldownCollection(true);
+    $cooldownCollection->createIndex(['set_at' => 1], ['background' => true]);
+    $cooldownCollection->createIndex(['updated_at' => 1], ['background' => true]);
+
+    $cooldownProbeKey = '__blbot/system/cooldown_probe';
+    $cooldownProbeSetAt = time();
+    $cooldownWriteResult = $cooldownCollection->updateOne(
+        ['_id' => $cooldownProbeKey],
+        ['$set' => [
+            'duration' => 0,
+            'set_at' => mongoUtcDateTimeFromTimestamp($cooldownProbeSetAt),
+            'updated_at' => new \MongoDB\BSON\UTCDateTime(),
+        ]],
+        getMongoOperationOptions(['upsert' => true]),
+    );
+
+    if(!$cooldownWriteResult->isAcknowledged()) {
+        throw new \RuntimeException('MongoDB cooldown 持久化自检失败：写入探针未被确认。');
+    }
+
+    $cooldownProbeDoc = $cooldownCollection->findOne(
+        ['_id' => $cooldownProbeKey],
+        getMongoOperationOptions(['projection' => ['set_at' => 1]]),
+    );
+
+    $cooldownProbeReadAt = mongoValueToTimestamp($cooldownProbeDoc['set_at'] ?? null);
+    if(!$cooldownProbeDoc || abs($cooldownProbeReadAt - $cooldownProbeSetAt) > 1) {
+        throw new \RuntimeException('MongoDB cooldown 持久化自检失败：探针数据读取不一致。');
+    }
+
     $checked = true;
 }
 
+
+function mongoSetCooldown(string $name, int $duration, int $setAt): bool {
+    $collection = getMongoCooldownCollection(true);
+
+    $result = $collection->updateOne(
+        ['_id' => $name],
+        ['$set' => [
+            'duration' => $duration,
+            'set_at' => mongoUtcDateTimeFromTimestamp($setAt),
+            'updated_at' => new \MongoDB\BSON\UTCDateTime(),
+        ]],
+        getMongoOperationOptions(['upsert' => true]),
+    );
+
+    if(!$result->isAcknowledged()) {
+        return false;
+    }
+
+    // P1 过渡清理：写入专用集合成功后，删除 kv_store 中遗留 cooldown 键
+    mongoDelData("coolDown/{$name}");
+    mongoDelData("coolDownMeta/{$name}");
+
+    return true;
+}
+
+
+
+function migrateLegacyCooldownFromKvStore(string $name): ?array {
+    $legacyDurationKey = "coolDown/{$name}";
+    $legacySetAtKey = "coolDownMeta/{$name}";
+
+    $legacyDurationRaw = mongoGetData($legacyDurationKey);
+    $legacySetAtRaw = mongoGetData($legacySetAtKey);
+
+    if($legacyDurationRaw === false && $legacySetAtRaw === false) {
+        return null;
+    }
+
+    $duration = (int)$legacyDurationRaw;
+    $setAt = (int)$legacySetAtRaw;
+    if($setAt <= 0) {
+        $setAt = mongoGetDataUpdatedAt($legacyDurationKey);
+    }
+    if($setAt <= 0) {
+        $setAt = time();
+    }
+
+    if(!mongoSetCooldown($name, $duration, $setAt)) {
+        throw new \RuntimeException("MongoDB cooldown 迁移失败：{$name}");
+    }
+
+    return [
+        'duration' => $duration,
+        'set_at' => $setAt,
+    ];
+}
+
+
+
+function mongoGetCooldown(string $name): ?array {
+    $collection = getMongoCooldownCollection(true);
+
+    $doc = $collection->findOne(
+        ['_id' => $name],
+        getMongoOperationOptions(['projection' => ['duration' => 1, 'set_at' => 1, 'updated_at' => 1]]),
+    );
+
+    if($doc) {
+        $setAt = mongoValueToTimestamp($doc['set_at'] ?? null);
+        if($setAt <= 0) {
+            $setAt = mongoValueToTimestamp($doc['updated_at'] ?? null);
+        }
+
+        return [
+            'duration' => (int)($doc['duration'] ?? 0),
+            'set_at' => $setAt,
+        ];
+    }
+
+    return migrateLegacyCooldownFromKvStore($name);
+}
 
 
 function normalizeStoredDataValue($data): string {
@@ -156,6 +307,9 @@ function normalizeStoredDataValue($data): string {
 
     return $encoded;
 }
+
+
+
 
 
 function mongoSetData(string $filePath, $data, bool $pending = false) {
@@ -204,13 +358,9 @@ function mongoGetDataUpdatedAt(string $filePath): int {
     );
     if(!$doc || !isset($doc['updated_at'])) return 0;
 
-    $updatedAt = $doc['updated_at'];
-    if($updatedAt instanceof \MongoDB\BSON\UTCDateTime) {
-        return (int)floor($updatedAt->toDateTime()->format('U'));
-    }
-
-    return 0;
+    return mongoValueToTimestamp($doc['updated_at']);
 }
+
 
 
 
@@ -825,27 +975,44 @@ function nextArg(bool $getRemaining = false) {
  * @param int $time 冷却时间
  */
 function coolDown(string $name, $time = null): int {
+    if(getDataBackend() === 'mongo') {
+        if(null === $time) {
+            $record = mongoGetCooldown($name);
+            if(!$record) {
+                return time();
+            }
+
+            $duration = (int)($record['duration'] ?? 0);
+            $setAt = (int)($record['set_at'] ?? 0);
+            return time() - $setAt - $duration;
+        }
+
+        $duration = (int)$time;
+        if(!mongoSetCooldown($name, $duration, time())) {
+            throw new \RuntimeException("MongoDB cooldown 写入失败：{$name}");
+        }
+
+        return -$duration;
+    }
+
     if(null === $time) {
         $duration = (int)getData("coolDown/{$name}");
         $setAt = (int)getData("coolDownMeta/{$name}");
 
         if($setAt <= 0) {
-            if(getDataBackend() === 'file') {
-                clearstatcache();
-                $coolDownFile = "../storage/data/coolDown/{$name}";
-                $setAt = file_exists($coolDownFile) ? filemtime($coolDownFile) : 0;
-            } else {
-                $setAt = mongoGetDataUpdatedAt("coolDown/{$name}");
-            }
+            clearstatcache();
+            $coolDownFile = "../storage/data/coolDown/{$name}";
+            $setAt = file_exists($coolDownFile) ? filemtime($coolDownFile) : 0;
         }
 
         return time() - $setAt - $duration;
-    } else {
-        setData("coolDown/{$name}", (string)(int)$time);
-        setData("coolDownMeta/{$name}", (string)time());
-        return -(int)$time;
     }
+
+    setData("coolDown/{$name}", (string)(int)$time);
+    setData("coolDownMeta/{$name}", (string)time());
+    return -(int)$time;
 }
+
 
 
 
