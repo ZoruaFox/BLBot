@@ -239,38 +239,36 @@ function ensureMongoPersistenceReady(): void {
         throw new \RuntimeException('MongoDB cooldown 持久化自检失败：探针数据读取不一致。');
     }
 
-    if(configBool('enableCheckinCollection', false)) {
         $checkinCollection = getMongoCheckinCollection(true);
-        $checkinCollection->createIndex(['user_id' => 1], ['background' => true]);
-        $checkinCollection->createIndex(['last_checkin_at' => 1], ['background' => true]);
-        $checkinCollection->createIndex(['updated_at' => 1], ['background' => true]);
+    $checkinCollection->createIndex(['user_id' => 1], ['background' => true]);
+    $checkinCollection->createIndex(['last_checkin_at' => 1], ['background' => true]);
+    $checkinCollection->createIndex(['updated_at' => 1], ['background' => true]);
 
-        $checkinProbeKey = '__blbot/system/checkin_probe';
-        $checkinProbeAt = time();
-        $checkinProbeWriteResult = $checkinCollection->updateOne(
-            ['_id' => $checkinProbeKey],
-            ['$set' => [
-                'type' => 'probe',
-                'user_id' => '__probe__',
-                'last_checkin_at' => mongoUtcDateTimeFromTimestamp($checkinProbeAt),
-                'updated_at' => new \MongoDB\BSON\UTCDateTime(),
-            ]],
-            getMongoOperationOptions(['upsert' => true]),
-        );
+    $checkinProbeKey = '__blbot/system/checkin_probe';
+    $checkinProbeAt = time();
+    $checkinProbeWriteResult = $checkinCollection->updateOne(
+        ['_id' => $checkinProbeKey],
+        ['$set' => [
+            'type' => 'probe',
+            'user_id' => '__probe__',
+            'last_checkin_at' => mongoUtcDateTimeFromTimestamp($checkinProbeAt),
+            'updated_at' => new \MongoDB\BSON\UTCDateTime(),
+        ]],
+        getMongoOperationOptions(['upsert' => true]),
+    );
 
-        if(!$checkinProbeWriteResult->isAcknowledged()) {
-            throw new \RuntimeException('MongoDB checkin 持久化自检失败：写入探针未被确认。');
-        }
+    if(!$checkinProbeWriteResult->isAcknowledged()) {
+        throw new \RuntimeException('MongoDB checkin 持久化自检失败：写入探针未被确认。');
+    }
 
-        $checkinProbeDoc = $checkinCollection->findOne(
-            ['_id' => $checkinProbeKey],
-            getMongoOperationOptions(['projection' => ['last_checkin_at' => 1]]),
-        );
+    $checkinProbeDoc = $checkinCollection->findOne(
+        ['_id' => $checkinProbeKey],
+        getMongoOperationOptions(['projection' => ['last_checkin_at' => 1]]),
+    );
 
-        $checkinProbeReadAt = mongoValueToTimestamp($checkinProbeDoc['last_checkin_at'] ?? null);
-        if(!$checkinProbeDoc || abs($checkinProbeReadAt - $checkinProbeAt) > 1) {
-            throw new \RuntimeException('MongoDB checkin 持久化自检失败：探针数据读取不一致。');
-        }
+    $checkinProbeReadAt = mongoValueToTimestamp($checkinProbeDoc['last_checkin_at'] ?? null);
+    if(!$checkinProbeDoc || abs($checkinProbeReadAt - $checkinProbeAt) > 1) {
+        throw new \RuntimeException('MongoDB checkin 持久化自检失败：探针数据读取不一致。');
     }
 
     $checked = true;
@@ -359,11 +357,11 @@ function mongoGetCooldown(string $name): ?array {
 }
 
 function useCheckinCollection(): bool {
-    return getDataBackend() === 'mongo' && configBool('enableCheckinCollection', false);
+    return getDataBackend() === 'mongo';
 }
 
 function checkinCollectionDualWriteEnabled(): bool {
-    return configBool('checkinCollectionDualWrite', true);
+    return false;
 }
 
 function getCheckinUserDocId(string $userId): string {
@@ -569,12 +567,8 @@ function setCheckinLastTimestamp($userId, int $timestamp): void {
     }
 
     try {
-        if(!mongoSetCheckinLastTimestamp($userId, $timestamp)) {
+                if(!mongoSetCheckinLastTimestamp($userId, $timestamp)) {
             throw new \RuntimeException("MongoDB checkin 写入失败：{$userId}");
-        }
-
-        if(checkinCollectionDualWriteEnabled()) {
-            setLegacyCheckinLastTimestamp($userId, $timestamp);
         }
     } catch(\Throwable $e) {
         logPersistenceWarning('checkin-write', $e->getMessage().' @ '.$e->getFile().':'.$e->getLine());
@@ -604,12 +598,8 @@ function setCheckinStat(array $stat): void {
     }
 
     try {
-        if(!mongoSetCheckinStat($normalized)) {
+                if(!mongoSetCheckinStat($normalized)) {
             throw new \RuntimeException('MongoDB checkin/stat 写入失败。');
-        }
-
-        if(checkinCollectionDualWriteEnabled()) {
-            setLegacyCheckinStat($normalized);
         }
     } catch(\Throwable $e) {
         logPersistenceWarning('checkin-stat-write', $e->getMessage().' @ '.$e->getFile().':'.$e->getLine());

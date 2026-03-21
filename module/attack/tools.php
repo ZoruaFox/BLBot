@@ -240,22 +240,7 @@ function getAttackMongoOptions(array $options = []): array {
 	return $options;
 }
 
-function useAttackCollection(): bool {
-	if(!function_exists('getDataBackend') || getDataBackend() !== 'mongo') {
-		return false;
-	}
 
-	global $Database;
-	if(!isset($Database) || !class_exists('MongoDB\\BSON\\UTCDateTime')) {
-		return false;
-	}
-
-	return function_exists('configBool') ? configBool('enableAttackCollection', false) : false;
-}
-
-function attackCollectionDualWriteEnabled(): bool {
-	return function_exists('configBool') ? configBool('attackCollectionDualWrite', true) : true;
-}
 
 function getMongoAttackCollection() {
 	global $Database;
@@ -306,19 +291,7 @@ function normalizeAttackData($data): array {
 	];
 }
 
-function getLegacyAttackData($user_id): array {
-	$file = getData('attack/user/'.$user_id);
-	if($file === false || $file === '') {
-		return defaultAttackData();
-	}
 
-	$decoded = json_decode($file, true);
-	return normalizeAttackData($decoded);
-}
-
-function setLegacyAttackData($user_id, array $data): void {
-	setData('attack/user/'.$user_id, json_encode(normalizeAttackData($data), JSON_UNESCAPED_UNICODE));
-}
 
 function mongoGetAttackData($user_id): ?array {
 	$doc = getMongoAttackCollection()->findOne(
@@ -356,24 +329,13 @@ function mongoSetAttackData($user_id, array $data): bool {
 function getAttackData($user_id) {
 	global $Queue, $Event;
 
-	if(!useAttackCollection()) {
-		$data = getLegacyAttackData($user_id);
-	} else {
-		try {
-			$data = mongoGetAttackData($user_id);
-			if(!$data) {
-				$legacy = getLegacyAttackData($user_id);
-				if($legacy !== defaultAttackData()) {
-					mongoSetAttackData($user_id, $legacy);
-				}
-				$data = $legacy;
-			}
-		} catch(\Throwable $e) {
-			if(function_exists('logPersistenceWarning')) {
-				logPersistenceWarning('attack-read', $e->getMessage().' @ '.$e->getFile().':'.$e->getLine());
-			}
-			$data = getLegacyAttackData($user_id);
+	try {
+		$data = mongoGetAttackData($user_id) ?? defaultAttackData();
+	} catch(\Throwable $e) {
+		if(function_exists('logPersistenceWarning')) {
+			logPersistenceWarning('attack-read', $e->getMessage().' @ '.$e->getFile().':'.$e->getLine());
 		}
+		$data = defaultAttackData();
 	}
 
 	if($Event['user_id'] == $user_id && $data['status'] != 'free' && intval($data['end']) <= intval(date('Ymd'))) {
@@ -416,24 +378,14 @@ function getAttackData($user_id) {
 function setAttackData($user_id, $data) {
 	$data = normalizeAttackData($data);
 
-	if(!useAttackCollection()) {
-		setLegacyAttackData($user_id, $data);
-		return;
-	}
-
 	try {
 		if(!mongoSetAttackData($user_id, $data)) {
 			throw new \RuntimeException('MongoDB attack 写入未确认');
-		}
-
-		if(attackCollectionDualWriteEnabled()) {
-			setLegacyAttackData($user_id, $data);
 		}
 	} catch(\Throwable $e) {
 		if(function_exists('logPersistenceWarning')) {
 			logPersistenceWarning('attack-write', $e->getMessage().' @ '.$e->getFile().':'.$e->getLine());
 		}
-		setLegacyAttackData($user_id, $data);
 	}
 }
 

@@ -65,10 +65,14 @@ if(!in_array($backend, ['file', 'mongo'], true)) {
     $backend = 'file';
 }
 
-$checkinEnabled = $backend === 'mongo' && $boolConfig('enableCheckinCollection', false);
-$checkinDualWrite = $boolConfig('checkinCollectionDualWrite', true);
-$attackEnabled = $backend === 'mongo' && $boolConfig('enableAttackCollection', false);
-$attackDualWrite = $boolConfig('attackCollectionDualWrite', true);
+$checkinEnabled = $backend === 'mongo';
+$checkinDualWrite = function_exists('checkinCollectionDualWriteEnabled')
+    ? checkinCollectionDualWriteEnabled()
+    : $boolConfig('checkinCollectionDualWrite', false);
+$attackEnabled = $backend === 'mongo';
+$attackDualWrite = function_exists('attackCollectionDualWriteEnabled')
+    ? attackCollectionDualWriteEnabled()
+    : $boolConfig('attackCollectionDualWrite', false);
 $rhEnabled = $backend === 'mongo' && $boolConfig('enableRhCollection', false);
 $rhDualWrite = $boolConfig('rhCollectionDualWrite', true);
 
