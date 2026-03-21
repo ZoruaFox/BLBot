@@ -34,6 +34,21 @@ function getCreditMongoOptions(array $options = []): array {
     return $options;
 }
 
+function creditAccountExists($QQ): bool {
+    $QQ = (string)$QQ;
+
+    if(!useMongoCreditCollection()) {
+        return getData("credit/{$QQ}") !== false;
+    }
+
+    $doc = getMongoCreditCollection()->findOne(
+        ['_id' => $QQ],
+        getCreditMongoOptions(['projection' => ['_id' => 1]]),
+    );
+
+    return is_array($doc) && isset($doc['_id']);
+}
+
 function getCredit($QQ) {
     $QQ = (string)$QQ;
 

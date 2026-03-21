@@ -33,7 +33,11 @@ $level = getLvl($QQ);
 $status = getStatus($QQ);
 $statusEnd = getStatusEndTime($QQ);
 $credit = getCredit($QQ);
+$hasCreditAccount = creditAccountExists($QQ);
 $msg = "您的金币余额为 {$credit}，经验值为 {$exp}，等级为 Lv{$level} ～";
+if(!$hasCreditAccount) {
+    $msg .= "\n你还没有开通过金币账户，首次签到或发生金币变动后会自动创建～";
+}
 if($Event['user_id'] == $QQ) {
     if($level == 0) {
         $msg .= "\n签到后即可升级 Lv1 哦～";
