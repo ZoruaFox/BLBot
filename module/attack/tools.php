@@ -232,10 +232,149 @@ function performFreeStatusAttack(&$data, $from, $target, $atTarget, $magnificati
 	
 	return $message;
 }
+function getAttackMongoOptions(array $options = []): array {
+	if(function_exists('getMongoOperationOptions')) {
+		return getMongoOperationOptions($options);
+	}
+
+	return $options;
+}
+
+function useAttackCollection(): bool {
+	if(!function_exists('getDataBackend') || getDataBackend() !== 'mongo') {
+		return false;
+	}
+
+	global $Database;
+	if(!isset($Database) || !class_exists('MongoDB\\BSON\\UTCDateTime')) {
+		return false;
+	}
+
+	return function_exists('configBool') ? configBool('enableAttackCollection', false) : false;
+}
+
+function attackCollectionDualWriteEnabled(): bool {
+	return function_exists('configBool') ? configBool('attackCollectionDualWrite', true) : true;
+}
+
+function getMongoAttackCollection() {
+	global $Database;
+	static $collection = null;
+
+	if($collection !== null) return $collection;
+
+	$collectionName = trim((string)config('mongoAttackCollection', 'attack_states'));
+	if($collectionName === '') $collectionName = 'attack_states';
+
+	$collection = $Database->$collectionName;
+	return $collection;
+}
+
+function defaultAttackData(): array {
+	return [
+		'status' => 'free',
+		'end' => '0',
+		'count' => [
+			'date' => '0',
+			'times' => 0,
+		],
+	];
+}
+
+function normalizeAttackData($data): array {
+	$default = defaultAttackData();
+	if(!is_array($data)) {
+		return $default;
+	}
+
+	$status = (string)($data['status'] ?? $default['status']);
+	if($status === '') $status = $default['status'];
+
+	$end = (string)($data['end'] ?? $default['end']);
+	if($end === '') $end = $default['end'];
+
+	$count = $data['count'] ?? [];
+	if(!is_array($count)) $count = [];
+
+	return [
+		'status' => $status,
+		'end' => $end,
+		'count' => [
+			'date' => (string)($count['date'] ?? $default['count']['date']),
+			'times' => (int)($count['times'] ?? $default['count']['times']),
+		],
+	];
+}
+
+function getLegacyAttackData($user_id): array {
+	$file = getData('attack/user/'.$user_id);
+	if($file === false || $file === '') {
+		return defaultAttackData();
+	}
+
+	$decoded = json_decode($file, true);
+	return normalizeAttackData($decoded);
+}
+
+function setLegacyAttackData($user_id, array $data): void {
+	setData('attack/user/'.$user_id, json_encode(normalizeAttackData($data), JSON_UNESCAPED_UNICODE));
+}
+
+function mongoGetAttackData($user_id): ?array {
+	$doc = getMongoAttackCollection()->findOne(
+		['_id' => (string)$user_id],
+		getAttackMongoOptions(['projection' => ['status' => 1, 'end' => 1, 'count' => 1]]),
+	);
+
+	if(!$doc || !is_array($doc)) {
+		return null;
+	}
+
+	return normalizeAttackData($doc);
+}
+
+function mongoSetAttackData($user_id, array $data): bool {
+	$data = normalizeAttackData($data);
+	$result = getMongoAttackCollection()->updateOne(
+		['_id' => (string)$user_id],
+		[
+			'$set' => [
+				'user_id' => (string)$user_id,
+				'status' => $data['status'],
+				'end' => $data['end'],
+				'count' => $data['count'],
+				'updated_at' => new \MongoDB\BSON\UTCDateTime(),
+			],
+			'$setOnInsert' => ['_id' => (string)$user_id],
+		],
+		getAttackMongoOptions(['upsert' => true]),
+	);
+
+	return $result->isAcknowledged();
+}
+
 function getAttackData($user_id) {
 	global $Queue, $Event;
-	$file = getData('attack/user/'.$user_id);
-	$data = json_decode($file ? $file : '{"status":"free","end":"0","count":{"date":"0","times":0}}', true);
+
+	if(!useAttackCollection()) {
+		$data = getLegacyAttackData($user_id);
+	} else {
+		try {
+			$data = mongoGetAttackData($user_id);
+			if(!$data) {
+				$legacy = getLegacyAttackData($user_id);
+				if($legacy !== defaultAttackData()) {
+					mongoSetAttackData($user_id, $legacy);
+				}
+				$data = $legacy;
+			}
+		} catch(\Throwable $e) {
+			if(function_exists('logPersistenceWarning')) {
+				logPersistenceWarning('attack-read', $e->getMessage().' @ '.$e->getFile().':'.$e->getLine());
+			}
+			$data = getLegacyAttackData($user_id);
+		}
+	}
 
 	if($Event['user_id'] == $user_id && $data['status'] != 'free' && intval($data['end']) <= intval(date('Ymd'))) {
 		switch($data['status']) {
@@ -275,7 +414,27 @@ function getAttackData($user_id) {
 }
 
 function setAttackData($user_id, $data) {
-	setData('attack/user/'.$user_id, json_encode($data));
+	$data = normalizeAttackData($data);
+
+	if(!useAttackCollection()) {
+		setLegacyAttackData($user_id, $data);
+		return;
+	}
+
+	try {
+		if(!mongoSetAttackData($user_id, $data)) {
+			throw new \RuntimeException('MongoDB attack 写入未确认');
+		}
+
+		if(attackCollectionDualWriteEnabled()) {
+			setLegacyAttackData($user_id, $data);
+		}
+	} catch(\Throwable $e) {
+		if(function_exists('logPersistenceWarning')) {
+			logPersistenceWarning('attack-write', $e->getMessage().' @ '.$e->getFile().':'.$e->getLine());
+		}
+		setLegacyAttackData($user_id, $data);
+	}
 }
 
 function getStatus($user_id) {
