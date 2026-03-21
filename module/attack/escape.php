@@ -13,7 +13,15 @@ if(!fromGroup()){
 $jrrp = getRp($Event['user_id'], time());
 $data = getAttackData($Event['user_id']);
 
-switch(getStatus($Event['user_id'])){
+// 兼容旧数据，确保 escape 冷却字段始终可用
+if(!isset($data['escape']) || !is_array($data['escape'])) {
+	$data['escape'] = ['date' => '0', 'times' => 0];
+} else {
+	$data['escape']['date'] = (string)($data['escape']['date'] ?? '0');
+	$data['escape']['times'] = (int)($data['escape']['times'] ?? 0);
+}
+
+switch($data['status']){
 	case 'free':
 		if(rand(1, 100) <= 85){
 			replyAndLeave('你现在不在监狱哦…难道还想再进去一次？');
@@ -68,10 +76,14 @@ switch(getStatus($Event['user_id'])){
 				$fine = rand($fineMin, $fineMax);
 				decCredit($Event['user_id'], $fine, true);
 				$message .= '你被罚款 '.$fine.' 金币';
-			}else{
+						}else{
 				// 加一天
-				if(getStatusEndTime($Event['user_id']) != '∞'){
-					$data['end'] = date('Ymd', strtotime(getStatusEndTime($Event['user_id'])) + 86400);
+				if((int)$data['end'] > 0 && (int)$data['end'] <= 29991231) {
+					$endDate = \DateTime::createFromFormat('Ymd', (string)$data['end']);
+					if($endDate instanceof \DateTime) {
+						$endDate->modify('+1 day');
+						$data['end'] = $endDate->format('Ymd');
+					}
 				}
 				$message .= '你蹲监狱的时间延长了一天';
 			}

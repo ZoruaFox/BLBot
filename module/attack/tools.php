@@ -66,8 +66,10 @@ function attack($from, $target, $atTarget, $dreaming = false) {
 		case 'imprisoned':
 			if(rand(0, 1)) {
 				$message = "狱警发现了你的小动作，对你进行了口头警告。";
-			} else {
+						} else {
 				$data['status'] = 'confined';
+				$data['escape']['date'] = date('Ymd');
+				$data['escape']['times'] = max(1, (int)($data['escape']['times'] ?? 0));
 				$message = "狱警发现了你的小动作，把你关进了禁闭室。";
 			}
 			break;
@@ -263,6 +265,10 @@ function defaultAttackData(): array {
 			'date' => '0',
 			'times' => 0,
 		],
+		'escape' => [
+			'date' => '0',
+			'times' => 0,
+		],
 	];
 }
 
@@ -278,8 +284,10 @@ function normalizeAttackData($data): array {
 	$end = (string)($data['end'] ?? $default['end']);
 	if($end === '') $end = $default['end'];
 
-	$count = $data['count'] ?? [];
+		$count = $data['count'] ?? [];
 	if(!is_array($count)) $count = [];
+	$escape = $data['escape'] ?? [];
+	if(!is_array($escape)) $escape = [];
 
 	return [
 		'status' => $status,
@@ -288,15 +296,19 @@ function normalizeAttackData($data): array {
 			'date' => (string)($count['date'] ?? $default['count']['date']),
 			'times' => (int)($count['times'] ?? $default['count']['times']),
 		],
+		'escape' => [
+			'date' => (string)($escape['date'] ?? $default['escape']['date']),
+			'times' => (int)($escape['times'] ?? $default['escape']['times']),
+		],
 	];
 }
 
 
 
 function mongoGetAttackData($user_id): ?array {
-	$doc = getMongoAttackCollection()->findOne(
+		$doc = getMongoAttackCollection()->findOne(
 		['_id' => (string)$user_id],
-		getAttackMongoOptions(['projection' => ['status' => 1, 'end' => 1, 'count' => 1]]),
+		getAttackMongoOptions(['projection' => ['status' => 1, 'end' => 1, 'count' => 1, 'escape' => 1]]),
 	);
 
 	if(!$doc || !is_array($doc)) {
@@ -310,12 +322,13 @@ function mongoSetAttackData($user_id, array $data): bool {
 	$data = normalizeAttackData($data);
 	$result = getMongoAttackCollection()->updateOne(
 		['_id' => (string)$user_id],
-		[
+				[
 			'$set' => [
 				'user_id' => (string)$user_id,
 				'status' => $data['status'],
 				'end' => $data['end'],
 				'count' => $data['count'],
+				'escape' => $data['escape'],
 				'updated_at' => new \MongoDB\BSON\UTCDateTime(),
 			],
 			'$setOnInsert' => ['_id' => (string)$user_id],
