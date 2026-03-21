@@ -37,10 +37,8 @@ mongoCreditCollection="credits"
 mongoAttackCollection="attack_states"
 ;MongoDB 中用于 rh 的专用集合（P3 Step1）
 mongoRhCollection="rh_states"
-;RH 领域集合开关（迁移期可灰度；收口后建议保持 true）
-enableRhCollection=false
-;RH 集合双写开关（迁移期 true，收口后应置为 false）
-rhCollectionDualWrite=true
+;RH 集合双写开关（迁移收口后应保持 false）
+rhCollectionDualWrite=false
 ;以下为历史迁移兼容配置：checkin/attack 已默认走 Mongo，建议保留 false
 ;（仅为兼容旧版本配置读取，不再作为运行时开关）
 enableCheckinCollection=false

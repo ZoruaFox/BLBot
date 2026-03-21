@@ -73,8 +73,8 @@ $attackEnabled = $backend === 'mongo';
 $attackDualWrite = function_exists('attackCollectionDualWriteEnabled')
     ? attackCollectionDualWriteEnabled()
     : $boolConfig('attackCollectionDualWrite', false);
-$rhEnabled = $backend === 'mongo' && $boolConfig('enableRhCollection', false);
-$rhDualWrite = $boolConfig('rhCollectionDualWrite', true);
+$rhEnabled = $backend === 'mongo';
+$rhDualWrite = $boolConfig('rhCollectionDualWrite', false);
 
 $mongoHealth = 'n/a';
 if($backend === 'mongo') {
