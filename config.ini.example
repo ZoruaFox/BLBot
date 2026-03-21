@@ -39,6 +39,8 @@ mongoAttackCollection="attack_states"
 mongoRhCollection="rh_states"
 ;RH 集合双写开关（迁移收口后应保持 false）
 rhCollectionDualWrite=false
+;RH 僵尸赛场清理判定阈值（秒），用于 #rh.clean 扫描跨群异常中断状态
+rhCleanStaleSeconds=1800
 ;以下为历史迁移兼容配置：checkin/attack 已默认走 Mongo，建议保留 false
 ;（仅为兼容旧版本配置读取，不再作为运行时开关）
 enableCheckinCollection=false
