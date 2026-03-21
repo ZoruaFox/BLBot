@@ -41,6 +41,75 @@ Disk: {$usedDisk}/{$totalDisk} ({$usedDiskPercent})
 Up:   {$uptime['text']}
 EOT;
 
+$boolConfig = function(string $key, bool $default = false): bool {
+    if(function_exists('configBool')) {
+        return configBool($key, $default);
+    }
+
+    $value = config($key, $default);
+    if(is_bool($value)) return $value;
+    if(is_int($value)) return $value !== 0;
+    if(is_string($value)) {
+        $normalized = strtolower(trim($value));
+        if(in_array($normalized, ['1', 'true', 'yes', 'on'], true)) return true;
+        if(in_array($normalized, ['0', 'false', 'no', 'off', ''], true)) return false;
+    }
+
+    return (bool)$value;
+};
+
+$backend = function_exists('getDataBackend')
+    ? getDataBackend()
+    : strtolower(trim((string)config('dataBackend', 'file')));
+if(!in_array($backend, ['file', 'mongo'], true)) {
+    $backend = 'file';
+}
+
+$checkinEnabled = $backend === 'mongo' && $boolConfig('enableCheckinCollection', false);
+$checkinDualWrite = $boolConfig('checkinCollectionDualWrite', true);
+$attackEnabled = $backend === 'mongo' && $boolConfig('enableAttackCollection', false);
+$attackDualWrite = $boolConfig('attackCollectionDualWrite', true);
+
+$mongoHealth = 'n/a';
+if($backend === 'mongo') {
+    global $Database;
+
+    if(isset($Database)) {
+        try {
+            $pingOptions = function_exists('getMongoOperationOptions') ? getMongoOperationOptions() : [];
+            $Database->command(['ping' => 1], $pingOptions);
+            $mongoHealth = 'ok';
+        } catch(\Throwable $e) {
+            $mongoHealth = 'error: '.$e->getMessage();
+        }
+    } else {
+        $mongoHealth = 'error: Database not initialized';
+    }
+}
+
+$checkinCollection = trim((string)config('mongoCheckinCollection', 'checkins'));
+if($checkinCollection === '') $checkinCollection = 'checkins';
+$creditCollection = trim((string)config('mongoCreditCollection', 'credits'));
+if($creditCollection === '') $creditCollection = 'credits';
+$attackCollection = trim((string)config('mongoAttackCollection', 'attack_states'));
+if($attackCollection === '') $attackCollection = 'attack_states';
+
+$msg .= "\n\n[Persistence]";
+$msg .= "\nBackend: {$backend}";
+$msg .= "\nMongo Health: {$mongoHealth}";
+$msg .= "\nCheckin Collection: ".($checkinEnabled ? "enabled ({$checkinCollection})" : 'disabled');
+$msg .= "\nCheckin Dual Write: ".($checkinDualWrite ? 'on' : 'off');
+$msg .= "\nCredit Collection: ".($backend === 'mongo' ? "active ({$creditCollection})" : 'inactive');
+$msg .= "\nAttack Collection: ".($attackEnabled ? "enabled ({$attackCollection})" : 'disabled');
+$msg .= "\nAttack Dual Write: ".($attackDualWrite ? 'on' : 'off');
+
+if($backend === 'mongo' && ($checkinDualWrite || $attackDualWrite)) {
+    $warn = [];
+    if($checkinDualWrite) $warn[] = 'checkin';
+    if($attackDualWrite) $warn[] = 'attack';
+    $msg .= "\nDual-write Warning: ".implode(', ', $warn).' still enabled';
+}
+
 if(function_exists('opcache_get_status')) {
     $opcache = @opcache_get_status(false);
     if(is_array($opcache) && !empty($opcache['opcache_enabled']) && isset($opcache['opcache_statistics'], $opcache['memory_usage'])) {
