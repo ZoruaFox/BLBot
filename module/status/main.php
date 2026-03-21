@@ -69,6 +69,8 @@ $checkinEnabled = $backend === 'mongo' && $boolConfig('enableCheckinCollection',
 $checkinDualWrite = $boolConfig('checkinCollectionDualWrite', true);
 $attackEnabled = $backend === 'mongo' && $boolConfig('enableAttackCollection', false);
 $attackDualWrite = $boolConfig('attackCollectionDualWrite', true);
+$rhEnabled = $backend === 'mongo' && $boolConfig('enableRhCollection', false);
+$rhDualWrite = $boolConfig('rhCollectionDualWrite', true);
 
 $mongoHealth = 'n/a';
 if($backend === 'mongo') {
@@ -93,6 +95,8 @@ $creditCollection = trim((string)config('mongoCreditCollection', 'credits'));
 if($creditCollection === '') $creditCollection = 'credits';
 $attackCollection = trim((string)config('mongoAttackCollection', 'attack_states'));
 if($attackCollection === '') $attackCollection = 'attack_states';
+$rhCollection = trim((string)config('mongoRhCollection', 'rh_states'));
+if($rhCollection === '') $rhCollection = 'rh_states';
 
 $msg .= "\n\n[Persistence]";
 $msg .= "\nBackend: {$backend}";
@@ -102,11 +106,14 @@ $msg .= "\nCheckin Dual Write: ".($checkinDualWrite ? 'on' : 'off');
 $msg .= "\nCredit Collection: ".($backend === 'mongo' ? "active ({$creditCollection})" : 'inactive');
 $msg .= "\nAttack Collection: ".($attackEnabled ? "enabled ({$attackCollection})" : 'disabled');
 $msg .= "\nAttack Dual Write: ".($attackDualWrite ? 'on' : 'off');
+$msg .= "\nRH Collection: ".($rhEnabled ? "enabled ({$rhCollection})" : 'disabled');
+$msg .= "\nRH Dual Write: ".($rhDualWrite ? 'on' : 'off');
 
-if($backend === 'mongo' && ($checkinDualWrite || $attackDualWrite)) {
+if($backend === 'mongo' && ($checkinDualWrite || $attackDualWrite || $rhDualWrite)) {
     $warn = [];
     if($checkinDualWrite) $warn[] = 'checkin';
     if($attackDualWrite) $warn[] = 'attack';
+    if($rhDualWrite) $warn[] = 'rh';
     $msg .= "\nDual-write Warning: ".implode(', ', $warn).' still enabled';
 }
 

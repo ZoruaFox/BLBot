@@ -1,5 +1,7 @@
 <?php
 
+loadModule('rh.common');
+
 global $Event;
 
 requireMaster();
@@ -7,10 +9,9 @@ if(!fromGroup()) {
     replyAndLeave('只能在群聊使用哦～');
 }
 
-$rhData = getData('rh/group/'.$Event['group_id']);
+$rhData = rhGetGroupState($Event['group_id']);
 $rhPlayers = [];
 if($rhData) {
-    $rhData = json_decode($rhData, true);
     if(isset($rhData['players']) && is_array($rhData['players'])) {
         $rhPlayers = $rhData['players'];
     }
@@ -32,12 +33,12 @@ coolDown('rh/user/'.$Event['user_id'], 0);
 
 // 开启本群本场次 force 标记：允许后续参与者无视马匹休息冷却加入
 // 预留 5 分钟覆盖倒计时及可能的延迟开赛；赛局结束会在 le() 中清理
-setData('rh/force/group/'.$Event['group_id'], strval(time() + 300));
+rhSetForceExpire($Event['group_id'], time() + 300);
 
 // 同步清除本场参与者（若有记录）的马匹冷却与锁定，避免冲突残留
 foreach($rhPlayers as $player) {
     coolDown('rh/user/'.$player, 0);
-    delData('rh/lock/'.$player);
+    rhUnlockHorse($player);
 }
 
 sendBackImmediately('[CQ:reply,id='.$Event['message_id'].']【Force】已强制覆写赛马冷却（含本场后续参赛者），正在按正常流程开场…');

@@ -8,6 +8,7 @@
  * - checkin/*, checkinMeta/*, checkin/stat
  * - credit/*（不含 credit.history）
  * - attack/user/*（不含 attack/group/*）
+ * - rh/group/*, rh/user/*, rh/lock/*, rh/force/group/*
  *
  * 用法：
  * php cleanup_legacy_migrated_data.php --dry-run
@@ -63,11 +64,13 @@ if($dataBackend !== 'mongo') {
 
 $checkinDualWrite = $toBool($config['checkinCollectionDualWrite'] ?? true, true);
 $attackDualWrite = $toBool($config['attackCollectionDualWrite'] ?? true, true);
+$rhDualWrite = $toBool($config['rhCollectionDualWrite'] ?? true, true);
 
-if(($checkinDualWrite || $attackDualWrite) && !$force) {
+if(($checkinDualWrite || $attackDualWrite || $rhDualWrite) && !$force) {
     fwrite(STDERR, "检测到 dual-write 仍开启：\n");
     if($checkinDualWrite) fwrite(STDERR, "- checkinCollectionDualWrite=true\n");
     if($attackDualWrite) fwrite(STDERR, "- attackCollectionDualWrite=true\n");
+    if($rhDualWrite) fwrite(STDERR, "- rhCollectionDualWrite=true\n");
     fwrite(STDERR, "请先关闭 dual-write 后再清理，或使用 --force 强制执行。\n");
     exit(1);
 }
@@ -94,6 +97,10 @@ $filters = [
     ['_id' => ['$regex' => '^checkinMeta/']],
     ['_id' => ['$regex' => '^credit/']],
     ['_id' => ['$regex' => '^attack/user/']],
+    ['_id' => ['$regex' => '^rh/group/']],
+    ['_id' => ['$regex' => '^rh/user/']],
+    ['_id' => ['$regex' => '^rh/lock/']],
+    ['_id' => ['$regex' => '^rh/force/group/']],
     ['_id' => 'checkin/stat'],
 ];
 
@@ -139,6 +146,10 @@ $collectFilePaths = static function(string $root): array {
         'checkinMeta',
         'attack/user',
         'credit',
+        'rh/group',
+        'rh/user',
+        'rh/lock',
+        'rh/force/group',
     ];
 
     $paths = [];

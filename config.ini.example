@@ -35,12 +35,18 @@ mongoCheckinCollection="checkins"
 mongoCreditCollection="credits"
 ;MongoDB 中用于 attack 的专用集合（P2 Step2）
 mongoAttackCollection="attack_states"
+;MongoDB 中用于 rh 的专用集合（P3 Step1）
+mongoRhCollection="rh_states"
 ;是否启用 checkin 领域集合读写（默认关闭，开启后新集合优先 + 兼容回退）
 enableCheckinCollection=false
 ;是否启用 attack 领域集合读写（默认关闭，开启后新集合优先 + 兼容回退）
 enableAttackCollection=false
+;是否启用 rh 领域集合读写（默认关闭，开启后新集合优先 + 兼容回退）
+enableRhCollection=false
 ;启用 attack 集合时，是否继续双写 legacy key（建议迁移期保持 true）
 attackCollectionDualWrite=true
+;启用 rh 集合时，是否继续双写 legacy key（建议迁移期保持 true）
+rhCollectionDualWrite=true
 ;启用 checkin 集合时，是否继续双写 legacy key（建议迁移期保持 true）
 checkinCollectionDualWrite=true
 
