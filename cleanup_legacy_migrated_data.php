@@ -18,7 +18,7 @@
  *
  * 说明：
  * - 默认 dry-run=false（直接执行）。建议先加 --dry-run 预览。
- * - 若检测到 dual-write 仍开启，会给出警告并终止；可用 --force 忽略。
+ * - 会读取历史 dual-write 配置项用于安全提示；若检测到为 true，默认终止（可用 --force 忽略）。
  */
 
 $autoloadFile = __DIR__.'/vendor/autoload.php';
@@ -62,16 +62,16 @@ if($dataBackend !== 'mongo') {
     exit(1);
 }
 
-$checkinDualWrite = $toBool($config['checkinCollectionDualWrite'] ?? true, true);
-$attackDualWrite = $toBool($config['attackCollectionDualWrite'] ?? true, true);
-$rhDualWrite = $toBool($config['rhCollectionDualWrite'] ?? true, true);
+$checkinDualWrite = $toBool($config['checkinCollectionDualWrite'] ?? false, false);
+$attackDualWrite = $toBool($config['attackCollectionDualWrite'] ?? false, false);
+$rhDualWrite = $toBool($config['rhCollectionDualWrite'] ?? false, false);
 
 if(($checkinDualWrite || $attackDualWrite || $rhDualWrite) && !$force) {
-    fwrite(STDERR, "检测到 dual-write 仍开启：\n");
+    fwrite(STDERR, "检测到历史 dual-write 配置为 true：\n");
     if($checkinDualWrite) fwrite(STDERR, "- checkinCollectionDualWrite=true\n");
     if($attackDualWrite) fwrite(STDERR, "- attackCollectionDualWrite=true\n");
     if($rhDualWrite) fwrite(STDERR, "- rhCollectionDualWrite=true\n");
-    fwrite(STDERR, "请先关闭 dual-write 后再清理，或使用 --force 强制执行。\n");
+    fwrite(STDERR, "请先确认已完成迁移收口（推荐将 dual-write 保持 false）后再清理，或使用 --force 强制执行。\n");
     exit(1);
 }
 
