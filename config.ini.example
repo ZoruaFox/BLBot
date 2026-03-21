@@ -29,8 +29,10 @@ dataBackend="file"
 mongoDataCollection="kv_store"
 ;MongoDB 中用于 coolDown 的专用集合（P1 已落地）
 mongoCooldownCollection="cooldowns"
-;MongoDB 中用于 checkin 的专用集合（P5 Step1）
+;MongoDB 中用于 checkin 的专用集合（P2 Step1）
 mongoCheckinCollection="checkins"
+;MongoDB 中用于 credit 的专用集合（P2 Step1）
+mongoCreditCollection="credits"
 ;是否启用 checkin 领域集合读写（默认关闭，开启后新集合优先 + 兼容回退）
 enableCheckinCollection=false
 ;启用 checkin 集合时，是否继续双写 legacy key（建议迁移期保持 true）
