@@ -10,6 +10,6 @@ for($n=1; $n <= $count; $n++){
 	$choices[] = nextArg();
 }
 $r = rand(0, $count-1);
-$Queue[]= replyMessage("Bot 觉得应该选 ".$choices[$r].(($Command[0] == 'middleware-choose')?"\n注：有可能是笨笨 Bot 误识别了消息 OvO":''));
+$Queue[]= replyMessage("Bot 觉得应该选 ".$choices[$r].(($Command[0] == 'middleware-choose')));
 
 ?>

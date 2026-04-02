@@ -26,6 +26,7 @@ $debug = fortuneGetProfileCalendarDebug($profile);
 $solarDatetime = $debug['solar_datetime'] ?? ($profile['solar_datetime'] ?? $profile['birth_datetime']);
 $lunarDate = $debug['lunar_date'] ?? ($profile['birth_lunar_date'] ?? '未知');
 $lunarGanzhi = $debug['lunar_ganzhi'] ?? ($profile['birth_lunar_ganzhi'] ?? '未知');
+$ganzhiRule = $debug['ganzhi_rule'] ?? ($profile['ganzhi_rule'] ?? fortuneGetGanzhiRuleDescription());
 $zodiacLunarYear = $debug['zodiac_lunar_year'] ?? ($profile['zodiac_lunar_year'] ?? ($profile['zodiac'] ?? '未知'));
 
 $bazi = $debug['bazi'] ?? ($profile['birth_bazi'] ?? []);
@@ -42,6 +43,7 @@ replyAndLeave(implode("\n", [
     '出生公历：'.$solarDatetime.' '.$timeHint,
     '出生农历：'.$lunarDate,
     '出生干支：'.$lunarGanzhi,
+    '干支口径：'.$ganzhiRule,
     '生肖：'.$zodiacLunarYear,
     '八字：'.$baziText,
     '八字五行：'.$wuxingText,

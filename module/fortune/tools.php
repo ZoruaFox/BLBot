@@ -47,6 +47,51 @@ function fortuneGetSolarClass(): string {
     return 'com\\nlf\\calendar\\Solar';
 }
 
+function fortuneGetGanzhiRuleDescription(): string {
+    return '年/月按立春当日切换，日按晚子时当天，时按当前时辰';
+}
+
+function fortuneResolveGanzhiPillars($lunar): array {
+    $year = $lunar->getYearInGanZhiByLiChun();
+    $month = $lunar->getMonthInGanZhi();
+    $day = $lunar->getDayInGanZhiExact2();
+    $time = $lunar->getTimeInGanZhi();
+
+    return [
+        'year' => $year,
+        'month' => $month,
+        'day' => $day,
+        'time' => $time,
+    ];
+}
+
+function fortuneFormatGanzhiPillars(array $pillars): string {
+    return $pillars['year'].'年 '.$pillars['month'].'月 '.$pillars['day'].'日 '.$pillars['time'].'时';
+}
+
+function fortunePillarToWuXing(string $pillar): string {
+    $utilClass = 'com\\nlf\\calendar\\util\\LunarUtil';
+    if(!class_exists($utilClass)) {
+        return '';
+    }
+
+    $gan = mb_substr($pillar, 0, 1, 'UTF-8');
+    $zhi = mb_substr($pillar, 1, 1, 'UTF-8');
+    $ganMap = $utilClass::$WU_XING_GAN;
+    $zhiMap = $utilClass::$WU_XING_ZHI;
+
+    return ($ganMap[$gan] ?? '').($zhiMap[$zhi] ?? '');
+}
+
+function fortuneResolvePillarsWuXing(array $pillars): array {
+    return [
+        fortunePillarToWuXing($pillars['year']),
+        fortunePillarToWuXing($pillars['month']),
+        fortunePillarToWuXing($pillars['day']),
+        fortunePillarToWuXing($pillars['time']),
+    ];
+}
+
 function fortuneClamp(float $value, float $min, float $max): float {
     if($value < $min) return $min;
     if($value > $max) return $max;
@@ -230,7 +275,8 @@ function fortuneCreateProfile(string $userId, array $birth): array {
         $birth['second'],
     );
     $lunar = $solar->getLunar();
-    $eight = $lunar->getEightChar();
+    $pillars = fortuneResolveGanzhiPillars($lunar);
+    $pillarWuXing = fortuneResolvePillarsWuXing($pillars);
 
     $existing = fortuneLoadProfile($userId) ?? [];
     $createdAt = intval($existing['created_at'] ?? time());
@@ -246,23 +292,19 @@ function fortuneCreateProfile(string $userId, array $birth): array {
         'zodiac' => $lunar->getYearShengXiao(),
         'zodiac_lunar_year' => $lunar->getYearShengXiao(),
         'birth_lunar_date' => $lunar->toString(),
-        'birth_lunar_ganzhi' => $lunar->getYearInGanZhiExact().'年 '.$lunar->getMonthInGanZhiExact().'月 '.$lunar->getDayInGanZhiExact2().'日 '.$lunar->getTimeInGanZhi().'时',
+        'birth_lunar_ganzhi' => fortuneFormatGanzhiPillars($pillars),
+        'ganzhi_rule' => fortuneGetGanzhiRuleDescription(),
         'birth_bazi' => [
-            'year' => $eight->getYear(),
-            'month' => $eight->getMonth(),
-            'day' => $eight->getDay(),
-            'time' => $eight->getTime(),
-            'year_wuxing' => $eight->getYearWuXing(),
-            'month_wuxing' => $eight->getMonthWuXing(),
-            'day_wuxing' => $eight->getDayWuXing(),
-            'time_wuxing' => $eight->getTimeWuXing(),
+            'year' => $pillars['year'],
+            'month' => $pillars['month'],
+            'day' => $pillars['day'],
+            'time' => $pillars['time'],
+            'year_wuxing' => $pillarWuXing[0],
+            'month_wuxing' => $pillarWuXing[1],
+            'day_wuxing' => $pillarWuXing[2],
+            'time_wuxing' => $pillarWuXing[3],
         ],
-        'birth_wuxing' => [
-            $eight->getYearWuXing(),
-            $eight->getMonthWuXing(),
-            $eight->getDayWuXing(),
-            $eight->getTimeWuXing(),
-        ],
+        'birth_wuxing' => $pillarWuXing,
         'created_at' => $createdAt,
         'updated_at' => time(),
     ];
@@ -301,29 +343,26 @@ function fortuneGetProfileCalendarDebug(array $profile): ?array {
     }
 
     $lunar = $solar->getLunar();
-    $eight = $lunar->getEightChar();
+    $pillars = fortuneResolveGanzhiPillars($lunar);
+    $pillarWuXing = fortuneResolvePillarsWuXing($pillars);
 
     return [
         'solar_datetime' => $solar->toYmdHms(),
         'lunar_date' => $lunar->toString(),
-        'lunar_ganzhi' => $lunar->getYearInGanZhiExact().'年 '.$lunar->getMonthInGanZhiExact().'月 '.$lunar->getDayInGanZhiExact2().'日 '.$lunar->getTimeInGanZhi().'时',
+        'lunar_ganzhi' => fortuneFormatGanzhiPillars($pillars),
+        'ganzhi_rule' => fortuneGetGanzhiRuleDescription(),
         'zodiac_lunar_year' => $lunar->getYearShengXiao(),
         'bazi' => [
-            'year' => $eight->getYear(),
-            'month' => $eight->getMonth(),
-            'day' => $eight->getDay(),
-            'time' => $eight->getTime(),
-            'year_wuxing' => $eight->getYearWuXing(),
-            'month_wuxing' => $eight->getMonthWuXing(),
-            'day_wuxing' => $eight->getDayWuXing(),
-            'time_wuxing' => $eight->getTimeWuXing(),
+            'year' => $pillars['year'],
+            'month' => $pillars['month'],
+            'day' => $pillars['day'],
+            'time' => $pillars['time'],
+            'year_wuxing' => $pillarWuXing[0],
+            'month_wuxing' => $pillarWuXing[1],
+            'day_wuxing' => $pillarWuXing[2],
+            'time_wuxing' => $pillarWuXing[3],
         ],
-        'wuxing' => [
-            $eight->getYearWuXing(),
-            $eight->getMonthWuXing(),
-            $eight->getDayWuXing(),
-            $eight->getTimeWuXing(),
-        ],
+        'wuxing' => $pillarWuXing,
     ];
 }
 
@@ -479,8 +518,8 @@ function fortuneComputeDraw(string $userId, array $profile, int $timestamp): arr
     );
     $birthLunar = $birthSolar->getLunar();
 
-    $nowEight = $lunar->getEightChar();
-    $birthEight = $birthLunar->getEightChar();
+    $nowPillars = fortuneResolveGanzhiPillars($lunar);
+    $birthPillars = fortuneResolveGanzhiPillars($birthLunar);
 
     $dayYi = $lunar->getDayYi();
     $dayJi = $lunar->getDayJi();
@@ -514,45 +553,36 @@ function fortuneComputeDraw(string $userId, array $profile, int $timestamp): arr
     }
     $zodiacScore = fortuneClamp($zodiacScore, 0, 100);
 
-    $birthPillars = [$birthEight->getYear(), $birthEight->getMonth(), $birthEight->getDay(), $birthEight->getTime()];
-    $nowPillars = [$nowEight->getYear(), $nowEight->getMonth(), $nowEight->getDay(), $nowEight->getTime()];
+    $birthPillarList = [$birthPillars['year'], $birthPillars['month'], $birthPillars['day'], $birthPillars['time']];
+    $nowPillarList = [$nowPillars['year'], $nowPillars['month'], $nowPillars['day'], $nowPillars['time']];
 
     $pillarMatch = 0;
     $stemMatch = 0;
     $branchMatch = 0;
     for($i = 0; $i < 4; $i++) {
-        if($birthPillars[$i] === $nowPillars[$i]) {
+        if($birthPillarList[$i] === $nowPillarList[$i]) {
             $pillarMatch++;
         }
 
-        $birthStem = mb_substr($birthPillars[$i], 0, 1);
-        $nowStem = mb_substr($nowPillars[$i], 0, 1);
+        $birthStem = mb_substr($birthPillarList[$i], 0, 1);
+        $nowStem = mb_substr($nowPillarList[$i], 0, 1);
         if($birthStem === $nowStem) {
             $stemMatch++;
         }
 
-        $birthBranch = mb_substr($birthPillars[$i], 1);
-        $nowBranch = mb_substr($nowPillars[$i], 1);
+        $birthBranch = mb_substr($birthPillarList[$i], 1);
+        $nowBranch = mb_substr($nowPillarList[$i], 1);
         if($birthBranch === $nowBranch) {
             $branchMatch++;
         }
     }
 
-    $birthWuxingSet = fortuneExtractWuxingSet([
-        $birthEight->getYearWuXing(),
-        $birthEight->getMonthWuXing(),
-        $birthEight->getDayWuXing(),
-        $birthEight->getTimeWuXing(),
-    ]);
-    $nowWuxingSet = fortuneExtractWuxingSet([
-        $nowEight->getYearWuXing(),
-        $nowEight->getMonthWuXing(),
-        $nowEight->getDayWuXing(),
-        $nowEight->getTimeWuXing(),
-    ]);
+    $birthWuxingSet = fortuneExtractWuxingSet(fortuneResolvePillarsWuXing($birthPillars));
+    $nowWuxingSet = fortuneExtractWuxingSet(fortuneResolvePillarsWuXing($nowPillars));
     $sharedWuxing = fortuneCountShared($birthWuxingSet, $nowWuxingSet);
 
-    $clashPenalty = $birthEight->getDayZhi() === $lunar->getDayChong() ? 10 : 0;
+    $birthDayZhi = mb_substr($birthPillars['day'], 1, 1, 'UTF-8');
+    $clashPenalty = $birthDayZhi === $lunar->getDayChong() ? 10 : 0;
 
     $baziScore = fortuneClamp(
         38
@@ -606,7 +636,8 @@ function fortuneComputeDraw(string $userId, array $profile, int $timestamp): arr
         'ji' => $jiSummary,
         'lunar' => [
             'ymd_cn' => $lunar->toString(),
-            'ganzhi' => $lunar->getYearInGanZhiExact().'年 '.$lunar->getMonthInGanZhiExact().'月 '.$lunar->getDayInGanZhiExact2().'日 '.$lunar->getTimeInGanZhi().'时',
+            'ganzhi' => fortuneFormatGanzhiPillars($nowPillars),
+            'ganzhi_rule' => fortuneGetGanzhiRuleDescription(),
             'jieqi' => $lunar->getJieQi(),
             'day_luck' => $lunar->getDayTianShenLuck(),
             'time_luck' => $lunar->getTimeTianShenLuck(),
