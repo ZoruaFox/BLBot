@@ -245,7 +245,6 @@ function fortuneCreateProfile(string $userId, array $birth): array {
         // 业务口径采用“春节换年”的生肖，避免立春边界导致认知偏差。
         'zodiac' => $lunar->getYearShengXiao(),
         'zodiac_lunar_year' => $lunar->getYearShengXiao(),
-        'zodiac_lichun' => $lunar->getYearShengXiaoExact(),
         'birth_lunar_date' => $lunar->toString(),
         'birth_lunar_ganzhi' => $lunar->getYearInGanZhiExact().'年 '.$lunar->getMonthInGanZhiExact().'月 '.$lunar->getDayInGanZhiExact2().'日 '.$lunar->getTimeInGanZhi().'时',
         'birth_bazi' => [
@@ -309,7 +308,6 @@ function fortuneGetProfileCalendarDebug(array $profile): ?array {
         'lunar_date' => $lunar->toString(),
         'lunar_ganzhi' => $lunar->getYearInGanZhiExact().'年 '.$lunar->getMonthInGanZhiExact().'月 '.$lunar->getDayInGanZhiExact2().'日 '.$lunar->getTimeInGanZhi().'时',
         'zodiac_lunar_year' => $lunar->getYearShengXiao(),
-        'zodiac_lichun' => $lunar->getYearShengXiaoExact(),
         'bazi' => [
             'year' => $eight->getYear(),
             'month' => $eight->getMonth(),
