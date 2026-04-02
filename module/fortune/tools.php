@@ -240,8 +240,14 @@ function fortuneCreateProfile(string $userId, array $birth): array {
         'birth_date' => $birth['date_ymd'],
         'birth_time' => $birth['time_his'],
         'birth_datetime' => $birth['datetime'],
+        'solar_datetime' => $solar->toYmdHms(),
         'time_defaulted' => (bool)$birth['is_default_time'],
-        'zodiac' => $lunar->getYearShengXiaoExact(),
+        // 业务口径采用“春节换年”的生肖，避免立春边界导致认知偏差。
+        'zodiac' => $lunar->getYearShengXiao(),
+        'zodiac_lunar_year' => $lunar->getYearShengXiao(),
+        'zodiac_lichun' => $lunar->getYearShengXiaoExact(),
+        'birth_lunar_date' => $lunar->toString(),
+        'birth_lunar_ganzhi' => $lunar->getYearInGanZhiExact().'年 '.$lunar->getMonthInGanZhiExact().'月 '.$lunar->getDayInGanZhiExact2().'日 '.$lunar->getTimeInGanZhi().'时',
         'birth_bazi' => [
             'year' => $eight->getYear(),
             'month' => $eight->getMonth(),
@@ -252,8 +258,74 @@ function fortuneCreateProfile(string $userId, array $birth): array {
             'day_wuxing' => $eight->getDayWuXing(),
             'time_wuxing' => $eight->getTimeWuXing(),
         ],
+        'birth_wuxing' => [
+            $eight->getYearWuXing(),
+            $eight->getMonthWuXing(),
+            $eight->getDayWuXing(),
+            $eight->getTimeWuXing(),
+        ],
         'created_at' => $createdAt,
         'updated_at' => time(),
+    ];
+}
+
+function fortuneGetProfileCalendarDebug(array $profile): ?array {
+    $birthDate = strval($profile['birth_date'] ?? '');
+    if(!preg_match('/^\d{8}$/', $birthDate)) {
+        return null;
+    }
+
+    $birthTime = strval($profile['birth_time'] ?? '120000');
+    if(!preg_match('/^\d{6}$/', $birthTime)) {
+        $birthTime = '120000';
+    }
+
+    $year = intval(substr($birthDate, 0, 4));
+    $month = intval(substr($birthDate, 4, 2));
+    $day = intval(substr($birthDate, 6, 2));
+    $hour = intval(substr($birthTime, 0, 2));
+    $minute = intval(substr($birthTime, 2, 2));
+    $second = intval(substr($birthTime, 4, 2));
+
+    if(!checkdate($month, $day, $year)) {
+        return null;
+    }
+    if($hour < 0 || $hour > 23 || $minute < 0 || $minute > 59 || $second < 0 || $second > 59) {
+        return null;
+    }
+
+    $solarClass = fortuneGetSolarClass();
+    try {
+        $solar = $solarClass::fromYmdHms($year, $month, $day, $hour, $minute, $second);
+    } catch(\Throwable $e) {
+        return null;
+    }
+
+    $lunar = $solar->getLunar();
+    $eight = $lunar->getEightChar();
+
+    return [
+        'solar_datetime' => $solar->toYmdHms(),
+        'lunar_date' => $lunar->toString(),
+        'lunar_ganzhi' => $lunar->getYearInGanZhiExact().'年 '.$lunar->getMonthInGanZhiExact().'月 '.$lunar->getDayInGanZhiExact2().'日 '.$lunar->getTimeInGanZhi().'时',
+        'zodiac_lunar_year' => $lunar->getYearShengXiao(),
+        'zodiac_lichun' => $lunar->getYearShengXiaoExact(),
+        'bazi' => [
+            'year' => $eight->getYear(),
+            'month' => $eight->getMonth(),
+            'day' => $eight->getDay(),
+            'time' => $eight->getTime(),
+            'year_wuxing' => $eight->getYearWuXing(),
+            'month_wuxing' => $eight->getMonthWuXing(),
+            'day_wuxing' => $eight->getDayWuXing(),
+            'time_wuxing' => $eight->getTimeWuXing(),
+        ],
+        'wuxing' => [
+            $eight->getYearWuXing(),
+            $eight->getMonthWuXing(),
+            $eight->getDayWuXing(),
+            $eight->getTimeWuXing(),
+        ],
     ];
 }
 
@@ -433,7 +505,8 @@ function fortuneComputeDraw(string $userId, array $profile, int $timestamp): arr
 
     $deityScore = fortuneClamp(50 + (count($jiShen) - count($xiongSha)) * 4, 0, 100);
 
-    $birthZodiac = strval($profile['zodiac'] ?? '');
+    // 求签评分统一使用“春节换年”生肖口径。
+    $birthZodiac = $birthLunar->getYearShengXiao();
     $zodiacScore = 55.0;
     if($birthZodiac !== '') {
         if($birthZodiac === $lunar->getDayShengXiao()) $zodiacScore += 12;

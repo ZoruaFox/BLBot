@@ -2,6 +2,7 @@
 
 loadModule('fortune.tools');
 requireMaster();
+fortuneEnsureCalendarReady();
 
 $targetArg = nextArg();
 if(!$targetArg) {
@@ -20,9 +21,37 @@ if(!$profile) {
 
 $timeHint = !empty($profile['time_defaulted']) ? '（未提供出生时分秒，已按午时默认）' : '';
 
+$debug = fortuneGetProfileCalendarDebug($profile);
+
+$solarDatetime = $debug['solar_datetime'] ?? ($profile['solar_datetime'] ?? $profile['birth_datetime']);
+$lunarDate = $debug['lunar_date'] ?? ($profile['birth_lunar_date'] ?? '未知');
+$lunarGanzhi = $debug['lunar_ganzhi'] ?? ($profile['birth_lunar_ganzhi'] ?? '未知');
+$zodiacLunarYear = $debug['zodiac_lunar_year'] ?? ($profile['zodiac_lunar_year'] ?? ($profile['zodiac'] ?? '未知'));
+$zodiacLiChun = $debug['zodiac_lichun'] ?? ($profile['zodiac_lichun'] ?? '未知');
+
+$bazi = $debug['bazi'] ?? ($profile['birth_bazi'] ?? []);
+$baziText = '未知';
+if(is_array($bazi) && isset($bazi['year'], $bazi['month'], $bazi['day'], $bazi['time'])) {
+    $baziText = $bazi['year'].' '.$bazi['month'].' '.$bazi['day'].' '.$bazi['time'];
+}
+
+$wuxing = $debug['wuxing'] ?? ($profile['birth_wuxing'] ?? []);
+$wuxingText = (is_array($wuxing) && count($wuxing)) ? implode(' | ', $wuxing) : '未知';
+
+$storedZodiac = strval($profile['zodiac'] ?? '');
+$zodiacDiffHint = '';
+if($storedZodiac !== '' && $storedZodiac !== $zodiacLunarYear) {
+    $zodiacDiffHint = '（旧存档生肖为 '.$storedZodiac.'，已按春节口径重算）';
+}
+
 replyAndLeave(implode("\n", [
     '用户 '.$targetUserId.' 生日信息：',
-    '生日：'.$profile['birth_datetime'].' '.$timeHint,
-    '生肖：'.$profile['zodiac'],
+    '出生公历：'.$solarDatetime.' '.$timeHint,
+    '出生农历：'.$lunarDate,
+    '出生干支：'.$lunarGanzhi,
+    '生肖（春节口径）：'.$zodiacLunarYear.' '.$zodiacDiffHint,
+    '生肖（立春口径）：'.$zodiacLiChun,
+    '八字：'.$baziText,
+    '八字五行：'.$wuxingText,
     '更新于：'.date('Y-m-d H:i:s', intval($profile['updated_at'] ?? time())),
 ]));
