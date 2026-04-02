@@ -7,7 +7,7 @@ fortuneEnsureCalendarReady();
 
 $first = nextArg();
 if(!$first) {
-    replyAndLeave('请提供生日参数。\n例如：#fortune.setbirth 1999-01-01 23:30');
+    replyAndLeave("请提供生日参数。\n例如：#fortune.setbirth 1999-01-01 23:30");
 }
 
 $operator = (string)$Event['user_id'];
@@ -32,7 +32,7 @@ if(count($parts) >= 2) {
 }
 
 if($birthInput === '') {
-    replyAndLeave('请提供生日日期。\n例如：#fortune.setbirth 1999-01-01 23:30');
+    replyAndLeave("请提供生日日期。\n例如：#fortune.setbirth 1999-01-01 23:30");
 }
 
 $birth = fortuneParseBirthDateTime($birthInput);

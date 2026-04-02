@@ -48,7 +48,7 @@ $map = [
 ];
 
 if(!isset($map[$subNormalized])) {
-    replyAndLeave('未知子命令：'.$sub.'\n\n'.fortuneHelpText());
+    replyAndLeave("未知子命令：{$sub}\n\n".fortuneHelpText());
 }
 
 loadModule('fortune.'.$map[$subNormalized]);

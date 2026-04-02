@@ -5,7 +5,7 @@ requireMaster();
 
 $targetArg = nextArg();
 if(!$targetArg) {
-    replyAndLeave('请提供要查询的用户 QQ 或 At。\n例如：#fortune birth 123456789');
+    replyAndLeave("请提供要查询的用户 QQ 或 At。\n例如：#fortune birth 123456789");
 }
 
 $targetUserId = fortuneResolveUserIdArg($targetArg);

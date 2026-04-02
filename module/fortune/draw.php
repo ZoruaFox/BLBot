@@ -10,7 +10,7 @@ fortuneEnsureCalendarReady();
 $userId = (string)$Event['user_id'];
 $profile = fortuneLoadProfile($userId);
 if(!$profile) {
-    replyAndLeave('你还没有设置生日信息，先发送 #fortune.setbirth <日期> [时间] 进行设置。\n例如：#fortune.setbirth 1999-01-01 23:30');
+    replyAndLeave("你还没有设置生日信息，先发送 #fortune.setbirth <日期> [时间] 进行设置。\n例如：#fortune.setbirth 1999-01-01 23:30");
 }
 
 $dateYmd = fortuneGetTodayDateYmd();
