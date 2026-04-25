@@ -15,7 +15,7 @@ if(!$profile) {
 
 $dateYmd = fortuneGetTodayDateYmd();
 $cached = fortuneLoadDailyResult($userId, $dateYmd);
-if($cached && intval($cached['algo_version'] ?? 0) === 1 && !empty($cached['reply'])) {
+if($cached && intval($cached['algo_version'] ?? 0) === fortuneGetAlgoVersion() && !empty($cached['reply'])) {
     replyAndLeave($cached['reply']);
 }
 

@@ -110,6 +110,242 @@ function fortuneSeed(string $seed): int {
     return (int)$hash;
 }
 
+function fortuneGetAlgoVersion(): int {
+    return 2;
+}
+
+function fortuneUnitFromSeed(string $seed): float {
+    return (fortuneSeed($seed) + 0.5) / 4294967296.0;
+}
+
+function fortuneEpsilonProbability(float $value): float {
+    return fortuneClamp($value, 1.0e-6, 1.0 - 1.0e-6);
+}
+
+function fortuneNormalCdf(float $x): float {
+    $a1 = 0.254829592;
+    $a2 = -0.284496736;
+    $a3 = 1.421413741;
+    $a4 = -1.453152027;
+    $a5 = 1.061405429;
+    $p = 0.3275911;
+
+    $sign = $x < 0 ? -1.0 : 1.0;
+    $z = abs($x) / sqrt(2.0);
+    $t = 1.0 / (1.0 + $p * $z);
+    $erf = 1.0 - (((((($a5 * $t + $a4) * $t + $a3) * $t + $a2) * $t + $a1) * $t) * exp(-$z * $z));
+
+    return fortuneClamp(0.5 * (1.0 + $sign * $erf), 0.0, 1.0);
+}
+
+function fortuneLogit(float $probability): float {
+    $p = fortuneEpsilonProbability($probability);
+    return log($p / (1.0 - $p));
+}
+
+function fortuneSigmoid(float $value): float {
+    if($value >= 0.0) {
+        $expNeg = exp(-$value);
+        return 1.0 / (1.0 + $expNeg);
+    }
+
+    $expPos = exp($value);
+    return $expPos / (1.0 + $expPos);
+}
+
+function fortuneSignedPowerStretch(float $probability, float $gamma = 0.72): float {
+    $p = fortuneClamp($probability, 0.0, 1.0);
+    $gamma = max(0.05, $gamma);
+
+    $signed = 2.0 * $p - 1.0;
+    $magnitude = pow(abs($signed), $gamma);
+    $stretched = ($signed >= 0.0 ? 1.0 : -1.0) * $magnitude;
+
+    return fortuneClamp(($stretched + 1.0) / 2.0, 0.0, 1.0);
+}
+
+function fortuneFactorToPercentile(string $name, float $score): float {
+    $clamped = fortuneClamp($score, 0.0, 100.0);
+
+    if($name === 'base_rp') {
+        return fortuneClamp(($clamped + 0.5) / 101.0, 0.0, 1.0);
+    }
+
+    $params = [
+        'almanac' => ['mean' => 50.0, 'std' => 12.5],
+        'deity' => ['mean' => 50.0, 'std' => 11.5],
+        'zodiac' => ['mean' => 55.0, 'std' => 14.0],
+        'bazi' => ['mean' => 50.0, 'std' => 12.0],
+    ];
+
+    $cfg = $params[$name] ?? ['mean' => 50.0, 'std' => 12.0];
+    $z = ($clamped - $cfg['mean']) / $cfg['std'];
+
+    return fortuneNormalCdf($z);
+}
+
+function fortuneBlendPercentiles(array $percentiles, array $weights): float {
+    $sumWeights = 0.0;
+    $sumLogit = 0.0;
+
+    foreach($weights as $name => $weight) {
+        $w = floatval($weight);
+        if($w <= 0.0) continue;
+
+        $p = floatval($percentiles[$name] ?? 0.5);
+        $sumLogit += $w * fortuneLogit($p);
+        $sumWeights += $w;
+    }
+
+    if($sumWeights <= 0.0) {
+        return 0.5;
+    }
+
+    return fortuneSigmoid($sumLogit / $sumWeights);
+}
+
+function fortuneGetScoreCalibrationPath(): string {
+    return 'fortune/calibration/score_v2.json';
+}
+
+function fortuneCreateScoreCalibrationState(): array {
+    $binSize = 0.5;
+    $binCount = intval(round(100.0 / $binSize)) + 1;
+
+    return [
+        'version' => fortuneGetAlgoVersion(),
+        'bin_size' => $binSize,
+        'bins' => array_fill(0, $binCount, 0),
+        'total' => 0,
+        'updated_at' => time(),
+    ];
+}
+
+function fortuneLoadScoreCalibrationState(): array {
+    $state = fortuneReadJson(fortuneGetScoreCalibrationPath());
+    if(!is_array($state)) {
+        return fortuneCreateScoreCalibrationState();
+    }
+
+    $binSize = floatval($state['bin_size'] ?? 0.5);
+    if($binSize <= 0.0) {
+        $binSize = 0.5;
+    }
+
+    $binCount = intval(round(100.0 / $binSize)) + 1;
+    $bins = $state['bins'] ?? [];
+
+    if(!is_array($bins) || count($bins) !== $binCount) {
+        $bins = array_fill(0, $binCount, 0);
+    } else {
+        foreach($bins as $i => $value) {
+            $bins[$i] = max(0, intval($value));
+        }
+    }
+
+    return [
+        'version' => fortuneGetAlgoVersion(),
+        'bin_size' => $binSize,
+        'bins' => $bins,
+        'total' => array_sum($bins),
+        'updated_at' => intval($state['updated_at'] ?? time()),
+    ];
+}
+
+function fortuneScoreToBinIndex(float $score, float $binSize, int $binCount): int {
+    $normalized = fortuneClamp($score, 0.0, 100.0);
+    if($normalized >= 100.0) {
+        return $binCount - 1;
+    }
+
+    $idx = intval(floor($normalized / $binSize));
+    if($idx < 0) {
+        return 0;
+    }
+    if($idx >= $binCount) {
+        return $binCount - 1;
+    }
+    return $idx;
+}
+
+function fortuneEstimateEmpiricalPercentile(float $score, array $state): ?float {
+    $bins = $state['bins'] ?? [];
+    $total = intval($state['total'] ?? 0);
+    if($total <= 0 || !is_array($bins) || !count($bins)) {
+        return null;
+    }
+
+    $binSize = floatval($state['bin_size'] ?? 0.5);
+
+    $normalized = fortuneClamp($score, 0.0, 100.0);
+    if($normalized >= 100.0) {
+        $normalized = 100.0 - 1.0e-9;
+    }
+
+    $scaled = $normalized / $binSize;
+    $idx = intval(floor($scaled));
+    if($idx < 0) {
+        $idx = 0;
+    }
+    if($idx >= count($bins)) {
+        $idx = count($bins) - 1;
+    }
+    $fraction = fortuneClamp($scaled - $idx, 0.0, 1.0);
+
+    $cum = 0;
+    for($i = 0; $i < $idx; $i++) {
+        $cum += intval($bins[$i] ?? 0);
+    }
+
+    $at = intval($bins[$idx] ?? 0);
+    return fortuneClamp(($cum + $at * $fraction) / $total, 0.0, 1.0);
+}
+
+function fortuneRecordScoreCalibrationSample(array $state, float $score): array {
+    $bins = $state['bins'] ?? [];
+    if(!is_array($bins) || !count($bins)) {
+        $state = fortuneCreateScoreCalibrationState();
+        $bins = $state['bins'];
+    }
+
+    $binSize = floatval($state['bin_size'] ?? 0.5);
+    $idx = fortuneScoreToBinIndex($score, $binSize, count($bins));
+    $bins[$idx] = intval($bins[$idx] ?? 0) + 1;
+
+    $state['bins'] = $bins;
+    $state['total'] = array_sum($bins);
+    $state['updated_at'] = time();
+
+    return $state;
+}
+
+function fortuneCalibratePercentile(float $rawScore, float $fallbackPercentile): array {
+    $state = fortuneLoadScoreCalibrationState();
+    $samplesBefore = intval($state['total'] ?? 0);
+
+    $empiricalPercentile = fortuneEstimateEmpiricalPercentile($rawScore, $state);
+    $warmup = fortuneClamp($samplesBefore / 2000.0, 0.0, 1.0);
+    if($empiricalPercentile === null) {
+        $empiricalPercentile = $fallbackPercentile;
+        $warmup = 0.0;
+    }
+
+    $fallback = fortuneClamp($fallbackPercentile, 0.0, 1.0);
+    $empirical = fortuneClamp($empiricalPercentile, 0.0, 1.0);
+    $percentile = (1.0 - $warmup) * $fallback + $warmup * $empirical;
+
+    $updatedState = fortuneRecordScoreCalibrationSample($state, $rawScore);
+    fortuneWriteJson(fortuneGetScoreCalibrationPath(), $updatedState);
+
+    return [
+        'percentile' => fortuneClamp($percentile, 0.0, 1.0),
+        'fallback_pct' => $fallback,
+        'empirical_pct' => $empirical,
+        'warmup' => $warmup,
+        'samples_before' => $samplesBefore,
+    ];
+}
+
 function fortuneGetProfilePath(string $userId): string {
     return 'fortune/profile/'.intval($userId).'.json';
 }
@@ -595,19 +831,45 @@ function fortuneComputeDraw(string $userId, array $profile, int $timestamp): arr
         100,
     );
 
+    $factorScores = [
+        'base_rp' => round($baseRp, 2),
+        'almanac' => round($almanacScore, 2),
+        'deity' => round($deityScore, 2),
+        'zodiac' => round($zodiacScore, 2),
+        'bazi' => round($baziScore, 2),
+    ];
+
+    $factorWeights = [
+        'base_rp' => 0.24,
+        'almanac' => 0.22,
+        'deity' => 0.10,
+        'zodiac' => 0.14,
+        'bazi' => 0.30,
+    ];
+
+    $rawBlend = 0.0;
+    foreach($factorWeights as $name => $weight) {
+        $rawBlend += floatval($factorScores[$name]) * floatval($weight);
+    }
+    $rawBlend = fortuneClamp($rawBlend, 0.0, 100.0);
+
+    $factorPercentiles = [];
+    foreach($factorScores as $name => $value) {
+        $factorPercentiles[$name] = fortuneFactorToPercentile($name, floatval($value));
+    }
+
+    $fusedPercentile = fortuneBlendPercentiles($factorPercentiles, $factorWeights);
+
+    $percentileValues = array_values($factorPercentiles);
+    $percentileSpread = max($percentileValues) - min($percentileValues);
     $dateYmd = date('Ymd', $timestamp);
-    $jitterSeed = fortuneSeed('fortune|'.$userId.'|'.$dateYmd);
-    $jitter = (($jitterSeed % 1101) - 550) / 100.0;
+    $fallbackPercentile = fortuneSignedPowerStretch($fusedPercentile, 0.88);
+    $calibration = fortuneCalibratePercentile($rawBlend, $fallbackPercentile);
 
-    $score =
-        $baseRp * 0.28
-        + $almanacScore * 0.24
-        + $deityScore * 0.10
-        + $zodiacScore * 0.14
-        + $baziScore * 0.24
-        + $jitter;
+    $microJitter = (fortuneUnitFromSeed('fortune-micro|'.$userId.'|'.$dateYmd) - 0.5) * 0.01;
+    $finalPercentile = fortuneClamp(floatval($calibration['percentile']) + $microJitter, 0.0, 1.0);
 
-    $score = round(fortuneClamp($score, 0, 100), 2);
+    $score = round($finalPercentile * 100.0, 2);
     $level = fortuneGetLevelByScore($score);
 
     $template = fortunePickTemplate($level, fortuneSeed('tpl|'.$userId.'|'.$dateYmd.'|'.$level));
@@ -623,7 +885,7 @@ function fortuneComputeDraw(string $userId, array $profile, int $timestamp): arr
     }
 
     return [
-        'algo_version' => 1,
+        'algo_version' => fortuneGetAlgoVersion(),
         'user_id' => (string)$userId,
         'date' => $dateYmd,
         'draw_at' => date('Y-m-d H:i:s', $timestamp),
@@ -652,7 +914,21 @@ function fortuneComputeDraw(string $userId, array $profile, int $timestamp): arr
             'deity' => round($deityScore, 2),
             'zodiac' => round($zodiacScore, 2),
             'bazi' => round($baziScore, 2),
-            'jitter' => round($jitter, 2),
+            'jitter' => round($microJitter * 100.0, 2),
+            'raw_blend' => round($rawBlend, 2),
+            'base_rp_pct' => round($factorPercentiles['base_rp'], 4),
+            'almanac_pct' => round($factorPercentiles['almanac'], 4),
+            'deity_pct' => round($factorPercentiles['deity'], 4),
+            'zodiac_pct' => round($factorPercentiles['zodiac'], 4),
+            'bazi_pct' => round($factorPercentiles['bazi'], 4),
+            'fused_pct' => round($fusedPercentile, 4),
+            'factor_spread' => round($percentileSpread, 4),
+            'fallback_pct' => round(floatval($calibration['fallback_pct']), 4),
+            'empirical_pct' => round(floatval($calibration['empirical_pct']), 4),
+            'calibration_warmup' => round(floatval($calibration['warmup']), 4),
+            'calibration_samples_before' => intval($calibration['samples_before']),
+            'micro_jitter' => round($microJitter, 4),
+            'final_pct' => round($finalPercentile, 4),
         ],
     ];
 }
