@@ -111,11 +111,24 @@ function fortuneSeed(string $seed): int {
 }
 
 function fortuneGetAlgoVersion(): int {
-    return 2;
+    return 4;
 }
 
 function fortuneUnitFromSeed(string $seed): float {
     return (fortuneSeed($seed) + 0.5) / 4294967296.0;
+}
+
+function fortuneWrapUnit(float $value): float {
+    $wrapped = fmod($value, 1.0);
+    if($wrapped < 0.0) {
+        $wrapped += 1.0;
+    }
+
+    if($wrapped >= 1.0) {
+        return 0.0;
+    }
+
+    return $wrapped;
 }
 
 function fortuneEpsilonProbability(float $value): float {
@@ -205,7 +218,7 @@ function fortuneBlendPercentiles(array $percentiles, array $weights): float {
 }
 
 function fortuneGetScoreCalibrationPath(): string {
-    return 'fortune/calibration/score_v2.json';
+    return 'fortune/calibration/score_v'.fortuneGetAlgoVersion().'.json';
 }
 
 function fortuneCreateScoreCalibrationState(): array {
@@ -840,11 +853,11 @@ function fortuneComputeDraw(string $userId, array $profile, int $timestamp): arr
     ];
 
     $factorWeights = [
-        'base_rp' => 0.24,
-        'almanac' => 0.22,
-        'deity' => 0.10,
-        'zodiac' => 0.14,
-        'bazi' => 0.30,
+        'base_rp' => 0.18,
+        'almanac' => 0.14,
+        'deity' => 0.06,
+        'zodiac' => 0.24,
+        'bazi' => 0.38,
     ];
 
     $rawBlend = 0.0;
@@ -863,11 +876,47 @@ function fortuneComputeDraw(string $userId, array $profile, int $timestamp): arr
     $percentileValues = array_values($factorPercentiles);
     $percentileSpread = max($percentileValues) - min($percentileValues);
     $dateYmd = date('Ymd', $timestamp);
-    $fallbackPercentile = fortuneSignedPowerStretch($fusedPercentile, 0.88);
-    $calibration = fortuneCalibratePercentile($rawBlend, $fallbackPercentile);
+    $drawTimeKey = date('His', $timestamp);
+    $drawHour = intval(date('H', $timestamp));
+    $birthHour = intval(substr($birthTime, 0, 2));
+    $hourDistance = abs($drawHour - $birthHour);
+    if($hourDistance > 12) {
+        $hourDistance = 24 - $hourDistance;
+    }
+    $timeResonance = fortuneClamp(1.0 - $hourDistance / 12.0, 0.0, 1.0);
 
-    $microJitter = (fortuneUnitFromSeed('fortune-micro|'.$userId.'|'.$dateYmd) - 0.5) * 0.01;
-    $finalPercentile = fortuneClamp(floatval($calibration['percentile']) + $microJitter, 0.0, 1.0);
+    // 生日、八字、求签时点共同生成个体相位，保证同日多人既分散又有命理参与。
+    $birthDateSeedPercentile = fortuneUnitFromSeed('fortune-birth-resonance|'.$birthDate.'|'.$birthTime.'|'.$dateYmd);
+    $drawMomentPercentile = fortuneUnitFromSeed('fortune-draw-moment|'.$dateYmd.'|'.$drawTimeKey.'|'.$nowPillars['time']);
+    $pillarResonancePercentile = fortuneUnitFromSeed(
+        'fortune-pillar-resonance|'
+        .$birthPillars['year'].'|'.$birthPillars['month'].'|'.$birthPillars['day'].'|'.$birthPillars['time']
+        .'|'.$nowPillars['year'].'|'.$nowPillars['month'].'|'.$nowPillars['day'].'|'.$nowPillars['time']
+        .'|'.$dateYmd,
+    );
+
+    $birthDrivenPercentile = fortuneClamp(
+        $factorPercentiles['bazi'] * 0.42
+        + $factorPercentiles['zodiac'] * 0.20
+        + $birthDateSeedPercentile * 0.16
+        + $pillarResonancePercentile * 0.12
+        + $timeResonance * 0.10,
+        0.0,
+        1.0,
+    );
+
+    $personalOffset = fortuneWrapUnit(
+        $birthDrivenPercentile * 0.52
+        + $factorPercentiles['almanac'] * 0.14
+        + $factorPercentiles['deity'] * 0.06
+        + $factorPercentiles['base_rp'] * 0.06
+        + $fusedPercentile * 0.10
+        + $drawMomentPercentile * 0.12,
+    );
+
+    $uniformAnchorPercentile = fortuneUnitFromSeed('fortune-uniform-anchor|'.$userId.'|'.$dateYmd);
+    $microJitter = (fortuneUnitFromSeed('fortune-micro|'.$userId.'|'.$dateYmd) - 0.5) * 0.002;
+    $finalPercentile = fortuneWrapUnit($uniformAnchorPercentile + $personalOffset + $microJitter);
 
     $score = round($finalPercentile * 100.0, 2);
     $level = fortuneGetLevelByScore($score);
@@ -914,19 +963,22 @@ function fortuneComputeDraw(string $userId, array $profile, int $timestamp): arr
             'deity' => round($deityScore, 2),
             'zodiac' => round($zodiacScore, 2),
             'bazi' => round($baziScore, 2),
-            'jitter' => round($microJitter * 100.0, 2),
+            'jitter' => round($microJitter * 100.0, 3),
             'raw_blend' => round($rawBlend, 2),
             'base_rp_pct' => round($factorPercentiles['base_rp'], 4),
             'almanac_pct' => round($factorPercentiles['almanac'], 4),
             'deity_pct' => round($factorPercentiles['deity'], 4),
             'zodiac_pct' => round($factorPercentiles['zodiac'], 4),
             'bazi_pct' => round($factorPercentiles['bazi'], 4),
+            'birth_seed_pct' => round($birthDateSeedPercentile, 4),
+            'draw_moment_pct' => round($drawMomentPercentile, 4),
+            'pillar_seed_pct' => round($pillarResonancePercentile, 4),
+            'time_resonance' => round($timeResonance, 4),
+            'birth_driven_pct' => round($birthDrivenPercentile, 4),
             'fused_pct' => round($fusedPercentile, 4),
             'factor_spread' => round($percentileSpread, 4),
-            'fallback_pct' => round(floatval($calibration['fallback_pct']), 4),
-            'empirical_pct' => round(floatval($calibration['empirical_pct']), 4),
-            'calibration_warmup' => round(floatval($calibration['warmup']), 4),
-            'calibration_samples_before' => intval($calibration['samples_before']),
+            'uniform_anchor_pct' => round($uniformAnchorPercentile, 4),
+            'personal_offset_pct' => round($personalOffset, 4),
             'micro_jitter' => round($microJitter, 4),
             'final_pct' => round($finalPercentile, 4),
         ],
