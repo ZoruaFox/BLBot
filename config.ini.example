@@ -63,6 +63,10 @@ Listen=-1
 ;是否开启一些功能
 alias=true
 
+;天地图应用密钥
+TIANDITU_TK=
+;彩云天气密钥
+CAIYUN_APP_KEY=
 ;==== 聊天与复读配置 ====
 ;群消息复读阈值（出现X次相同消息后机器人复读），默认为3
 repeatThreshold=3
