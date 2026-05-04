@@ -23,10 +23,14 @@ $temp = $weather['result']['hourly']['temperature'][0]['value'];
 $feels = $weather['result']['hourly']['apparent_temperature'][0]['value'];
 $humidity = $weather['result']['hourly']['humidity'][0]['value'] * 100;
 $aqi = $weather['result']['hourly']['air_quality']['aqi'][0]['value']['chn'];
+$alertContent = $weather['result']['alert']['content'] ?? [];
+if(!is_array($alertContent)) {
+    $alertContent = [];
+}
 $alerts = implode("\n\n", array_map(
     fn($alert) => $alert['description'],
     array_filter(
-        $weather['result']['alert']['content'],
+        $alertContent,
         fn($alert) => intval(substr($alert['code'], -2)) >= 2
     )
 ));
