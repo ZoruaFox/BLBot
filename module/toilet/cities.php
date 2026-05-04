@@ -9,6 +9,10 @@ if(time() <= $cacheTime + 86400) {
 } else {
     $citiesMeta = json_decode(getData('toilet/citiesMeta.json'), true);
 
+    if(!is_array($citiesMeta) || empty($citiesMeta)) {
+        replyAndLeave('⚠ 洗手间数据库未初始化，无法生成数据图！');
+    }
+
     // Image init
     $image = new Imagick();
     $image->newImage(1, 1, '#FFFFFF');

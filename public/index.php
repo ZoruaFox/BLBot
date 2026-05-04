@@ -2,18 +2,57 @@
 
 if(function_exists('fastcgi_finish_request')) fastcgi_finish_request();
 
-require('init.php');
+try {
+    require('init.php');
+} catch (\Throwable $e) {
+    @file_put_contents('../storage/data/error.log', date('Y-m-d H:i:s')." [bootstrap] ".$e->getMessage()." @ ".$e->getFile().':'.$e->getLine()."\n", FILE_APPEND);
+    http_response_code(500);
+    exit;
+}
 
-use kjBot\Frame\Message;
+
 
 try {
     $listen = config('Listen');
-    $whiteList = json_decode(getData('whitelist.json'), true)['groups'];
-    if($whiteList && !in_array($Event['group_id'], $whiteList) && $Event['group_id'] != null) {
+    $whiteListJson = getData('whitelist.json');
+    $whiteList = $whiteListJson ? json_decode($whiteListJson, true)['groups'] : null;
+    if($whiteList && isset($Event['group_id']) && !in_array($Event['group_id'], $whiteList)) {
         $Queue[] = sendMaster('No access at '.$Event['group_id']);
         $Queue[] = sendDevGroup('No access at '.$Event['group_id']);
         $CQ->setGroupLeave($Event['group_id']);
         exit();
+    }
+
+    // 处理用户黑白名单 (来自 config.ini)
+    $userListMode = config('userListMode', 'none');
+    if($userListMode !== 'none' && isset($Event['user_id'])) {
+        $usersStr = config('userListUsers', '');
+        $uList = $usersStr === '' ? [] : array_map('trim', explode(',', $usersStr));
+        if($userListMode === 'blacklist' && in_array((string)$Event['user_id'], $uList)) {
+            exit(); // 黑名单用户直接丢弃
+        }
+        if($userListMode === 'whitelist' && !in_array((string)$Event['user_id'], $uList)) {
+            // 除了master也作为白名单的一员，但如果有明确报错的话
+            $master = config('master', '');
+            if($Event['user_id'] != $master) {
+                exit();
+            }
+        }
+    }
+
+    // 处理群聊黑白名单 (来自 config.ini)，兼容旧版 whitelist.json
+    $groupListMode = config('groupListMode', 'none');
+    if($groupListMode !== 'none' && isset($Event['group_id'])) {
+        $groupsStr = config('groupListGroups', '');
+        $gList = $groupsStr === '' ? [] : array_map('trim', explode(',', $groupsStr));
+        if($groupListMode === 'blacklist' && in_array((string)$Event['group_id'], $gList)) {
+            exit(); // 如果是黑名单则不要响应
+        }
+        if($groupListMode === 'whitelist' && !in_array((string)$Event['group_id'], $gList)) {
+            // 如果是白名单，且不在白名单内，也可以向原版一样退群
+            // 但用户可能只指不想响应，所以这里简单 exit 处理
+            exit();
+        }
     }
 
     switch($Event['post_type']) {
@@ -32,8 +71,14 @@ try {
         $Queue[] = sendMaster(var_export($Event, true)."\n\n".var_export($Queue, true));
     }
 
-} catch (\Exception $e) {
-    if($e->getMessage()) {
+} catch (\Throwable $e) {
+    // 捕获真正的代码级错误并推送到开发群 (如TypeError, ParseError)
+    if ($e instanceof \Error) {
+        $errorMsg = "Bot运行时异常：\n" . get_class($e) . ": " . $e->getMessage() . "\n文件: " . $e->getFile() . " (" . $e->getLine() . ")";
+        $Queue[] = sendDevGroup($errorMsg);
+        $Queue[] = replyMessage("系统内部发生错误，已报告给开发者。", false, true);
+        setData('error.log', date('Y-m-d H:i:s') . "\n" . $e->getTraceAsString() . "\n\n", true);
+    } else if ($e->getMessage()) {
         if(preg_match('/\[CQ:reply,id=(-?\d+?)\]/', $e->getMessage())) {
             $Queue[] = sendBack($e->getMessage(), false, true);
         } else {
@@ -45,9 +90,11 @@ try {
 try {
     //将队列中的消息发出
     foreach($Queue as $msg) {
-        $MsgSender->send($msg);
+        if($msg !== null) {
+            $MsgSender->send($msg);
+        }
     }
-} catch (\Exception $e) {
+} catch (\Throwable $e) {
     if($e->getCode() == -11) {
         try {
             $MsgSender0->send($msg);

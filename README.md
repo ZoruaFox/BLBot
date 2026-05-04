@@ -36,6 +36,42 @@ db.createUser({
 
 将其中的 `user` 和 `pwd` 字段的内容分别填入 `config.ini` 的 `dbUsername` 和 `dbPassword` 中。如果没有更改过 MongoDB 的端口号，`dbPort` 可以留空。
 
+## 持久化与迁移收口（运维）
+
+当前版本建议使用 **MongoDB 作为单一持久化真源**（`dataBackend="mongo"`）。
+
+建议的生产配置基线：
+
+- `dataBackend="mongo"`
+- `checkinCollectionDualWrite=false`
+- `attackCollectionDualWrite=false`
+- `rhCollectionDualWrite=false`
+
+发布后巡检建议：
+
+1. 执行 `#status`，确认：
+   - `Backend: mongo`
+   - `Mongo Health: ok`
+   - `Checkin/Attack/RH Dual Write: off`
+2. 抽测核心链路：`checkin`、`attack`、`credit.transfer`、`rh`
+3. 检查 `storage/data/error.log` 是否存在持续 persistence warning
+
+已完成迁移后的历史数据清理（可重复 dry-run）：
+
+```sh
+php cleanup_legacy_migrated_data.php --dry-run
+php cleanup_legacy_migrated_data.php
+```
+
+若需要同时清理 `storage/data` 的历史文件：
+
+```sh
+php cleanup_legacy_migrated_data.php --include-file-storage --dry-run
+php cleanup_legacy_migrated_data.php --include-file-storage
+```
+
+
+
 ## 框架结构
 
 ```

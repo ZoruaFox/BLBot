@@ -2,7 +2,7 @@
 
 requireLvl(2);
 
-$stations = json_decode(file_get_contents('https://m.shmetro.com/core/shmetro/mdstationinfoback_new.ashx?act=getAllStations'), true);
+$stations = json_decode(fetchHttp('https://m.shmetro.com/core/shmetro/mdstationinfoback_new.ashx?act=getAllStations'), true);
 $stationName = nextArg();
 if (!$stationName) replyAndLeave('不知道你要查询什么车站呢…');
 
@@ -14,7 +14,7 @@ foreach ($stations as $station) {
     $cache = "shmetro/{$code}.png";
     $pic = getCache($cache);
     if(!$pic || time() > getCacheTime($cache) + 86400 * 30) {
-      $pic = file_get_contents("https://service.shmetro.com/skin/zct/{$code}.jpg");
+      $pic = fetchHttp("https://service.shmetro.com/skin/zct/{$code}.jpg");
       setCache("shmetro/{$code}.png", $pic);
     }
     if (!in_array($pic, $pics)) {

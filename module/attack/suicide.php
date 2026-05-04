@@ -20,6 +20,13 @@ switch($status){
 		}
 	case 'free':
 		$data = getAttackData($Event['user_id']);
+		if($Event['user_id'] == config('master')){
+			$data['status'] = 'free';
+			$data['end'] = -1;
+			setAttackData($Event['user_id'], $data);
+			replyAndLeave('由于神秘力量的干涉，你的监狱状态被抵消了。');
+			break;
+		}
 		$data['status'] = 'imprisoned';
 		$data['end'] = strval(min(intval($end), 99999999));
 		setAttackData($Event['user_id'], $data);

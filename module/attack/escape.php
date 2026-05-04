@@ -13,7 +13,15 @@ if(!fromGroup()){
 $jrrp = getRp($Event['user_id'], time());
 $data = getAttackData($Event['user_id']);
 
-switch(getStatus($Event['user_id'])){
+// 兼容旧数据，确保 escape 冷却字段始终可用
+if(!isset($data['escape']) || !is_array($data['escape'])) {
+	$data['escape'] = ['date' => '0', 'times' => 0];
+} else {
+	$data['escape']['date'] = (string)($data['escape']['date'] ?? '0');
+	$data['escape']['times'] = (int)($data['escape']['times'] ?? 0);
+}
+
+switch($data['status']){
 	case 'free':
 		if(rand(1, 100) <= 85){
 			replyAndLeave('你现在不在监狱哦…难道还想再进去一次？');
@@ -39,18 +47,20 @@ switch(getStatus($Event['user_id'])){
 		break;
 	case 'imprisoned':
 	case 'confined':
-		if($data['escape']['date'] == date('Ymd') && $data['escape']['times'] > 0){
+		$isMaster = ($Event['user_id'] == config('master'));
+		if(!$isMaster && $data['escape']['date'] == date('Ymd') && $data['escape']['times'] > 0){
 			replyAndLeave('你今天喜提狱警特别关照，别试了，没用的，洗洗睡吧。');
 		}
 		$data['escape']['date'] = date('Ymd');
 		$data['escape']['times'] += 1;
 		if(rand(1, 100) <= 2){
 			// 进医院
-			$message = '越狱时你感到一阵刺痛，等你醒来时已经元气大伤，躺在了手术台上。(支付 20000 金币手术费)';
+			$hospitalCost = (int)config('escapeHospitalCost', 20000);
+			$message = "越狱时你感到一阵刺痛，等你醒来时已经元气大伤，躺在了手术台上。(支付 {$hospitalCost} 金币手术费)";
 			$data['status'] = 'hospitalized';
 			$data['end'] = date('Ymd', time() + 86400);
-			decCredit($Event['user_id'], 20000, true);
-		}else if(rand(1, 100) <= 50 + 0.5 * $jrrp){
+			decCredit($Event['user_id'], $hospitalCost, true);
+		}else if(rand(1, 100) <= 0.5 * $jrrp){
 			// 越狱成功
 			$message = '趁狱警不注意，你成功溜了出来。';
 			$data['status'] = 'free';
@@ -61,13 +71,19 @@ switch(getStatus($Event['user_id'])){
 			$message = '越狱失败了，';
 			if(rand(1, 100) <= $jrrp){
 				// 罚款
-				$fine = rand(30000, 60000);
+				$fineMin = (int)config('escapeFineMin', '30000');
+				$fineMax = (int)config('escapeFineMax', '60000');
+				$fine = rand($fineMin, $fineMax);
 				decCredit($Event['user_id'], $fine, true);
 				$message .= '你被罚款 '.$fine.' 金币';
-			}else{
+						}else{
 				// 加一天
-				if(getStatusEndTime($Event['user_id']) != '∞'){
-					$data['end'] = date('Ymd', strtotime(getStatusEndTime($Event['user_id'])) + 86400);
+				if((int)$data['end'] > 0 && (int)$data['end'] <= 29991231) {
+					$endDate = \DateTime::createFromFormat('Ymd', (string)$data['end']);
+					if($endDate instanceof \DateTime) {
+						$endDate->modify('+1 day');
+						$data['end'] = $endDate->format('Ymd');
+					}
 				}
 				$message .= '你蹲监狱的时间延长了一天';
 			}

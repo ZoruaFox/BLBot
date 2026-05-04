@@ -25,7 +25,7 @@ if(!preg_match('/^(?:https?|webcal):\/\/(.+?)\//', $link, $matches)) {
 }
 $domain = $matches[1];
 
-$iCal = new ZCiCal(file_get_contents(str_replace('webcal://', 'https://', $link)));
+$iCal = new ZCiCal(fetchHttp(str_replace('webcal://', 'https://', $link)));
 $timezoneName = 'Asia/Shanghai';
 foreach($iCal->tree->child as $node) {
     if($node->getName() == 'VTIMEZONE' && $node->data['TZID']->getValues()) {

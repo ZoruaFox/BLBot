@@ -7,5 +7,7 @@ $message = trim(implode(' ', array_slice($Command, 1))."\n".$Text);
 if(!$message) replyAndLeave('不知道你想反馈什么呢…');
 $message = $Event['user_id'].(fromGroup() ? ("(@{$Event['group_id']})") : '')." 的反馈：\n({$Event['message_id']})\n{$message}";
 $Queue[] = sendMaster($message);
-$Queue[] = sendDevGroup($message);
+if (config('devgroup')) {
+    $Queue[] = sendDevGroup($message);
+}
 $Queue[] = replyMessage('已经收到你的反馈啦～');

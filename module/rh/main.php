@@ -1,17 +1,33 @@
 <?php
 
+loadModule('rh.common');
+
+// 赛马入场费
+function rhEntryFee(): int {
+    return 3000;
+}
+
 // 离开赛马
 function le(string $str, bool $endGame = true, bool $reply = false) {
     global $Event;
-    $rhData = json_decode(getData('rh/group/'.$Event['group_id']), true);
-    if($endGame) {
+    $rhData = rhGetGroupState($Event['group_id']);
+
+    date_default_timezone_set("Asia/Shanghai");
+    $isNightSession = (date('H') < 5 || date('H') > 22);
+    $cdTime = $isNightSession ? 15 * 60 : 7.5 * 60; // 晚间场冷却惩罚
+
+    if($endGame && is_array($rhData) && isset($rhData['players'])) {
         foreach($rhData['players'] as $player) {
-            coolDown('rh/user/'.$player, 7.5 * 60);
+            coolDown('rh/user/'.$player, $cdTime);
             unlockHorse($player);
         }
-        coolDown('rh/group/'.$Event['group_id'], 7.5 * 60);
+        coolDown('rh/group/'.$Event['group_id'], $cdTime);
+        if($isNightSession) {
+            $str .= "\n\n【晚间场提醒】马需要更长的时间休息，请骑手注意不要疲劳驾驶";
+        }
     }
-    delData('rh/group/'.$Event['group_id']);
+    rhDeleteGroupState($Event['group_id']);
+    rhClearForce($Event['group_id']);
 
     if($reply) {
         replyAndLeave($str);
@@ -62,17 +78,17 @@ function legalCharCheck(string $str) {
 
 // 锁定马
 function lockHorse($user_id) {
-    setData('rh/lock/'.$user_id, '1');
+    rhLockHorse($user_id);
 }
 
 // 解锁所有马
 function unlockHorse($user_id) {
-    delData('rh/lock/'.$user_id);
+    rhUnlockHorse($user_id);
 }
 
 // 检查马锁定状态
 function isHorseLocked($user_id) {
-    return getData('rh/lock/'.$user_id);
+    return rhIsHorseLocked($user_id);
 }
 
 // 初始化游戏
@@ -80,7 +96,7 @@ function initGame() {
     global $Event, $CQ;
 
     requireLvl(3, '发起赛马', '等待其他群成员发起赛马后加入');
-    setData('rh/group/'.$Event['group_id'], json_encode(['status' => 'initializing']));
+    rhSetGroupState($Event['group_id'], ['status' => 'initializing']);
 
     global $assets;
     $assets['h'] = "🐴"; //[CQ:emoji,id=128052]
@@ -90,9 +106,10 @@ function initGame() {
 
     // 检查时间
     date_default_timezone_set("Asia/Shanghai");
-    if(date('H') < 5 || date('H') > 22) {
-        le('赛马场不在营业时间，关门休息啦…', false, true);
-    }
+    $isNightSession = (date('H') < 5 || date('H') > 22);
+    // if(date('H') < 5 || date('H') > 22) {
+    //     le('赛马场不在营业时间，关门休息啦…', false, true);
+    // }
     // if(date('w') != '3' && date('w') != '6' && date('w') != '0'){
     //     le('新赛马场逢周三、周六日运营哦～', false, true);
     // }
@@ -102,17 +119,26 @@ function initGame() {
         le('你的'.$assets['h'].'现在在别的赛'.$assets['h'].'场哦？', false, true);
     }
 
+        // 检查金币是否足够
+    $entryFee = rhEntryFee();
+    loadModule('credit.tools');
+    if(getCredit($Event['user_id']) < $entryFee) {
+        le('你没有足够的金币发起赛'.$assets['h'].'哦（需要 '.$entryFee.' 金币）～', false, true);
+    }
+
     // 检查cd
+        $forceActive = rhHasActiveForce($Event['group_id']);
     if(coolDown("rh/group/".$Event['group_id']) < 0) {
         $time = -coolDown("rh/group/".$Event['group_id']);
         le('赛马场清理中，大约还需要'.(((intval($time / 60) > 0) ? (intval($time / 60).'分') : '')).((($time % 60) > 0) ? ($time % 60).'秒' : '钟').'～', false, true);
     }
-    if(coolDown("rh/user/".$Event['user_id']) < 0) {
+    if(!$forceActive && coolDown("rh/user/".$Event['user_id']) < 0) {
         $time = -coolDown("rh/user/".$Event['user_id']);
         le('你的马正在休息，大约还需要'.(((intval($time / 60) > 0) ? (intval($time / 60).'分') : '')).((($time % 60) > 0) ? ($time % 60).'秒' : '钟').'～', false, true);
     }
 
-    // 锁定马
+        // 先扣费再锁马，避免极端情况下扣费失败导致马锁残留
+    decCredit($Event['user_id'], $entryFee);
     lockHorse($Event['user_id']);
 
     // 50% 概率出现奇怪的马
@@ -160,11 +186,12 @@ function initGame() {
         }
     }
 
-    setData('rh/group/'.$Event['group_id'], json_encode(['status' => 'starting', 'players' => [$Event['user_id']], 'horse' => $assets['h']]));
+    rhSetGroupState($Event['group_id'], ['status' => 'starting', 'players' => [$Event['user_id']], 'horse' => $assets['h']]);
 
     $reaction = preg_match('/^\[CQ:face,id=(\d+)\]$/', $assets['h'], $match) ? $match[1] : '424';
     $CQ->setGroupReaction($Event['group_id'], $Event['message_id'], $reaction);
-    re('[CQ:reply,id='.$Event['message_id'].']已发起赛'.$assets['h'].'，发送“赛'.$assets['h']."”或指令 #rh 即可加入～\n赛".$assets['h']."将于一分钟后开始哦～");
+    $nightMsg = $isNightSession ? "【晚间场】Bro赛马的热情这么晚了都十分高涨\n" : "";
+    re('[CQ:reply,id='.$Event['message_id'].']已发起赛'.$assets['h'].'，发送“赛'.$assets['h']."”或指令 #rh 即可加入～\n".$nightMsg."赛".$assets['h']."将于一分钟后开始哦～");
     countDownGame(0);
 }
 
@@ -176,8 +203,11 @@ function joinGame() {
     loadModule('credit.tools');
     requireLvl(1, '加入赛马');
 
-    // 检查赛马场
-    $rhData = json_decode(getData('rh/group/'.$Event['group_id']), true);
+        // 检查赛马场
+    $rhData = rhGetGroupState($Event['group_id']);
+    if(!is_array($rhData) || ($rhData['status'] ?? '') !== 'starting' || !isset($rhData['players']) || !is_array($rhData['players']) || !isset($rhData['horse'])) {
+        replyAndLeave('赛马场状态已刷新，请重新发起 #rh ～');
+    }
     $horse = $rhData['horse'];
     if(in_array($Event['user_id'], $rhData['players'])) {
         replyAndLeave('你的'.$horse.'已经加入赛场咯～', false);
@@ -192,25 +222,33 @@ function joinGame() {
     }
 
     // 检查cd
-    if(coolDown("rh/user/".$Event['user_id']) < 0) {
+        $forceActive = rhHasActiveForce($Event['group_id']);
+    if(!$forceActive && coolDown("rh/user/".$Event['user_id']) < 0) {
         $time = -coolDown("rh/user/".$Event['user_id']);
         replyAndLeave('你的'.$horse.'正在休息，大约还需要'.(((intval($time / 60) > 0) ? (intval($time / 60).'分') : '')).((($time % 60) > 0) ? ($time % 60).'秒' : '钟').'～');
     }
 
+        $entryFee = rhEntryFee();
+    if(getCredit($Event['user_id']) < $entryFee) {
+        replyAndLeave('你没有足够的金币加入赛'.$horse.'哦（需要 '.$entryFee.' 金币）～');
+    }
+
+        decCredit($Event['user_id'], $entryFee);
     lockHorse($Event['user_id']);
-    decCredit($Event['user_id'], 1000);
 
     $rhData['players'][] = $Event['user_id'];
-    setData('rh/group/'.$Event['group_id'], json_encode($rhData));
+    rhSetGroupState($Event['group_id'], $rhData);
 
     $reaction = preg_match('/^\[CQ:face,id=(\d+)\]$/', $horse, $match) ? $match[1] : '424';
     $CQ->setGroupReaction($Event['group_id'], $Event['message_id'], $reaction);
-    replyAndLeave('加入赛'.$horse."成功，消耗了1000金币～\n现在赛".$horse.'场有'.count($rhData['players']).'匹'.$horse.'了～'.(json_decode(getData('rh/user/'.$Event['user_id']), true)['nickname'] ? '' : "\n现在可以使用 #rh.nickname 设置昵称了，快试试吧~"));
+    $userRhData = rhGetUserData($Event['user_id']) ?? [];
+    replyAndLeave('加入赛'.$horse."成功，消耗了 ".$entryFee." 金币～\n现在赛".$horse.'场有'.count($rhData['players']).'匹'.$horse.'了～'.(($userRhData['nickname'] ?? '') ? '' : "\n现在可以使用 #rh.nickname 设置昵称了，快试试吧~"));
 }
 
 // 开始前的倒计时
 function countDownGame($time) {
     global $Event, $assets;
+    loadModule('credit.tools');
 
     // 倒计时一分钟
     sleep(30);
@@ -220,21 +258,32 @@ function countDownGame($time) {
     sleep(10);
 
     // 看看人数够不够
-    $rhData = json_decode(getData('rh/group/'.$Event['group_id']), true);
-    if($time === 0 && count($rhData['players']) <= 3) {
+    // 为了防止 getData 缓存，需要重置一下缓存
+    global $memoryCache_getData;
+        unset($memoryCache_getData['rh/group/'.$Event['group_id']]);
+    $rhData = rhGetGroupState($Event['group_id']);
+    if(!is_array($rhData) || !isset($rhData['players']) || !is_array($rhData['players'])) {
+        leave('赛马场状态已变更，本场倒计时取消。');
+    }
+    $players = $rhData['players'];
+    if($time === 0 && count($players) <= 3) {
         // 延迟一分钟
         re('参与赛'.$assets['h'].'的人数太少了，本场赛'.$assets['h'].'延迟一分钟开始～还有60秒～');
         countDownGame(1);
         return;
-    } else if($time !== 0 && count($rhData['players']) <= 1) {
-        unlockHorse($Event['user_id']);
-        le('你'.$assets['h'].'的，场上还是只有一匹'.$assets['h'].'，没法赛'.$assets['h'].'了呢', false);
+                } else if($time !== 0 && count($players) <= 1) {
+        $entryFee = rhEntryFee();
+        $onlyPlayer = $players[0] ?? $Event['user_id'];
+        addCredit($onlyPlayer, $entryFee);
+        unlockHorse($onlyPlayer);
+        le('你'.$assets['h'].'的，场上还是只有一匹'.$assets['h'].'，没法赛'.$assets['h'].'了呢\n已退还入场费 '.$entryFee.' 金币～', false);
     } else {
-        setData('rh/group/'.$Event['group_id'], json_encode(['status' => 'started', 'players' => $rhData['players'], 'time' => time()]));
-        if(count($rhData['players']) <= 3 || !rand(0, 9)) {
+                rhSetGroupState($Event['group_id'], ['status' => 'started', 'players' => $players, 'time' => time()]);
+        if(count($players) <= 3 || !rand(0, 9)) {
             re('Bot 偷偷加入了赛'.$assets['h'].'～');
-            $rhData['players'][] = config('bot');
+            $players[] = config('bot');
         }
+        $rhData['players'] = $players;
         startGame($rhData);
     }
 }
@@ -243,11 +292,15 @@ function countDownGame($time) {
 function startGame($rhData): never {
     loadModule('rh.tools');
     loadModule('credit.tools');
+    loadModule('jrrp.tools');
 
     global $Event, $assets;
     global $horses;
-    $players = $rhData['players'];
+        $players = (isset($rhData['players']) && is_array($rhData['players'])) ? $rhData['players'] : [];
     $playersCount = count($players);
+    if($playersCount <= 0) {
+        le('赛马场状态异常，本场取消。', false);
+    }
     $horses = [];
     $deadHorse = [];
     $aliveHorse = range(0, $playersCount - 1);
@@ -256,7 +309,7 @@ function startGame($rhData): never {
     foreach($players as $n => $player) {
         $reply .= "[CQ:at,qq=".$player."]，你".$assets['h']."的编号为".($n + 1);
         $horses[] = new Horse(13, 16, $assets['h'], $assets['nh'], $assets['dh']);
-        $userData = json_decode(getData('rh/user/'.$player), true);
+        $userData = rhGetUserData($player) ?? [];
         if($userData['nickname']) {
             $assets['num'][$n + 1] = $userData['nickname'];
             $reply .= '「'.$userData['nickname'].'」';
@@ -285,6 +338,8 @@ function startGame($rhData): never {
                     '被xxs气活了',
                     '使用不死图腾复活了',
                     '睡醒了',
+                    '被丁真骑回了赛'.$assets['h'].'场',
+                    '出了一个名刀司命',
                 ]);
             } else {
                 // 诈尸 50%（消失马 0%）
@@ -307,6 +362,7 @@ function startGame($rhData): never {
                     '克服阻力做功，功率为μmgv',
                     '围绕赛'.$assets['h'].'场作匀速圆周运动，摩擦力≈mv²/r',
                     '没开满核定，摇车了',
+                    '正在看尽长安花',
                 ]);
             } else if($determination <= 700) {
                 // 走一大步 30%
@@ -398,6 +454,7 @@ function startGame($rhData): never {
                         '被萨卡兹枯朽吞噬者吞噬了',
                         '拍 999318 被抓了',
                         '被鹰角网络的龙卷风刮跑了',
+                        '被抓去拍千星奇域了',
                     ]);
                 } else {
                     // 自己作大死 10%
@@ -506,18 +563,32 @@ function startGame($rhData): never {
             }
         }
 
-        if($win !== null) {
-            $money = rand($playersCount * 500, $playersCount * 2000);
+                if($win !== null) {
+            $entryFee = rhEntryFee();
+                        $paidPlayersCount = 0;
+            $botSponsored = false;
+            foreach($players as $player) {
+                if($player != config('bot')) {
+                    $paidPlayersCount += 1;
+                } else {
+                    // Bot 特殊逻辑：默认不持有金币，但参与时视作补足一份入场费进入奖池
+                    $botSponsored = true;
+                }
+            }
+            $basePrize = $paidPlayersCount * $entryFee + ($botSponsored ? $entryFee : 0);
             sleep(5);
-            $determination = rand(1, 100);
-            $corpseFraudulent = $horses[$win]->isDead();
-            if($players[$win] != config('bot') && !$corpseFraudulent && $determination <= 90) {
-                // 获得金币 90%
-                addCredit($players[$win], $money);
-                le(($win + 1).'号'.$horses[$win]->getChar().'成功抵达终点，[CQ:at,qq='.$players[$win].'] 获胜，获得'.$money.'金币哦～🏆');
+
+            if($players[$win] != config('bot')) {
+                $winnerJrrp = getRp($players[$win], time());
+                                // 人品加成控制在 0%~6%（较之前稍陡）
+                $bonusRate = intval(floor($winnerJrrp / 15));
+                $bonus = intval(floor($basePrize * $bonusRate / 100));
+                $prize = $basePrize + $bonus;
+
+                addCredit($players[$win], $prize);
+                le(($win + 1).'号'.$horses[$win]->getChar().'成功抵达终点，[CQ:at,qq='.$players[$win].'] 获胜，赢得奖池'.$basePrize.'金币'.($botSponsored ? '（含 Bot 补足入场费 '.$entryFee.'）' : '').($bonus > 0 ? '，并触发今日人品('.$winnerJrrp.')加成 +'.$bonus.'（'.$bonusRate.'%）' : '。今日人品('.$winnerJrrp.')未触发额外加成').'，共获得'.$prize.'金币哦～🏆');
             } else {
-                // 没金币了 10%
-                le(($win + 1).'号'.$horses[$win]->getChar().'成功'.($corpseFraudulent === null ? '抵达终点' : getRandChar(4)).'，[CQ:at,qq='.$players[$win].'] 获胜，但是'.$horses[$win]->getChar().'把金币'.($corpseFraudulent === null ? '吃' : getRandChar(1)).'掉了～🏆');
+                le(($win + 1).'号'.$horses[$win]->getChar().'成功抵达终点，[CQ:at,qq='.$players[$win].'] 获胜，Bot 把奖池'.$basePrize.'金币'.($botSponsored ? '（含 Bot 补足入场费 '.$entryFee.'）' : '').'叼走了～🏆');
             }
         }
         if(!count($aliveHorse)) {
@@ -534,8 +605,7 @@ if(!fromGroup()) {
     replyAndLeave('打算单人赛马嘛？');
 }
 
-if($rhData = getData('rh/group/'.$Event['group_id'])) {
-    $rhData = json_decode($rhData, true);
+if($rhData = rhGetGroupState($Event['group_id'])) {
     switch($rhData['status']) {
         case 'banned':
             replyAndLeave("管理员关停了本群内赛马场…");

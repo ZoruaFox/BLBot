@@ -3,7 +3,6 @@
 global $Event, $Command, $Text;
 requireLvl(1);
 loadModule('schedule.tools');
-loadModule('schedule.xiaoai.tools');
 
 $name = null;
 $semesterStart = null;
@@ -22,8 +21,9 @@ EOT);
     replyAndLeave('这好像不是小爱课表的链接哦…');
 }
 $params = explode('%26', base64_decode($matches[1]));
-$data = (new AiSchedule())->getCourseTable($params[2]);
-if(!$data) replyAndLeave('读取失败，可能是链接无效…');
+$api = "https://i.ai.mi.com/course-multi/table?ctId={$params[4]}&userId={$params[0]}&deviceId={$params[1]}";
+$data = @json_decode(@file_get_contents($api), true)['data'];
+if(!$data) replyAndLeave("读取失败，小米官方大抵又调整了小爱课程表的分享机制分享功能寄啦…\n【注意】由于上游缺少鉴权依赖，本次已自动为您回退降级至旧版解析接口。如果此提示反复出现，说明旧版直连接口也已被小米彻底关停，请尝试其它方式录入课表~");
 
 $name = $data['name'];
 $semesterStart = json_decode($data['setting']['extend'], true)['startSemester'] / 1000;

@@ -21,6 +21,41 @@ addFriendMsg="BLBot 已经是你的好友啦，发送 #help 查看帮助～"
 addGroupMsg="欢迎加入本群，我是 BLBot，发送 #help 查看帮助～"
 ;头像缓存时长
 avatarCacheTime=86400
+
+;==== 数据持久化后端配置 ====
+;持久化后端：file 或 mongo。建议生产使用 mongo（单一持久化真源）
+dataBackend="file"
+;MongoDB 中用于 getData/setData 键值存储的集合名（仅兼容过渡层）
+mongoDataCollection="kv_store"
+;MongoDB 中用于 coolDown 的专用集合（P1 已落地）
+mongoCooldownCollection="cooldowns"
+;MongoDB 中用于 checkin 的专用集合（P2 Step1）
+mongoCheckinCollection="checkins"
+;MongoDB 中用于 credit 的专用集合（P2 Step1）
+mongoCreditCollection="credits"
+;MongoDB 中用于 attack 的专用集合（P2 Step2）
+mongoAttackCollection="attack_states"
+;MongoDB 中用于 rh 的专用集合（P3 Step1）
+mongoRhCollection="rh_states"
+;RH 集合双写开关（迁移收口后应保持 false）
+rhCollectionDualWrite=false
+;RH 僵尸赛场清理判定阈值（秒），用于 #rh.clean 扫描跨群异常中断状态
+rhCleanStaleSeconds=1800
+;以下为历史迁移兼容配置：checkin/attack 已默认走 Mongo，建议保留 false
+;（仅为兼容旧版本配置读取，不再作为运行时开关）
+enableCheckinCollection=false
+enableAttackCollection=false
+;以下为历史双写兼容配置，收口后建议保持 false
+checkinCollectionDualWrite=false
+attackCollectionDualWrite=false
+
+
+;==== PHP 缓存配置（可选） ====
+;是否启用 APCu 作为 getData/setData 的共享缓存后端（需要安装并启用 APCu 扩展）
+enableApcuDataCache=true
+;APCu 键的 TTL（秒），0 表示不过期
+apcuDataCacheTtl=0
+
 ;调试选项
 DEBUG=false
 DebugListen=
@@ -32,3 +67,96 @@ alias=true
 TIANDITU_TK=
 ;彩云天气密钥
 CAIYUN_APP_KEY=
+;==== 聊天与复读配置 ====
+;群消息复读阈值（出现X次相同消息后机器人复读），默认为3
+repeatThreshold=3
+;垃圾分类查询接口模板，{keyword} 会被替换为查询词的 URL 编码
+trashApiTemplate="https://api.vvhan.com/api/lajifenlei?name={keyword}"
+
+;==== 经济与数值配置 ====
+;签到每日获得的经验值
+checkinExp=1
+;存款低于100万时的签到金币底数与上限
+checkinLowIncomeMin=10000
+checkinLowIncomeMax=150000
+;存款大于等于1000万时的签到金币底数与上限
+checkinHighIncomeMin=1000
+checkinHighIncomeMax=10000
+;签到金币系数（默认0.9，即整体约下调10%）
+checkinIncomeFactor=0.9
+;被外星人抓走的冻结时间(秒)
+abductionDuration=86400
+
+;升级所需的经验值
+lv1Exp=1
+lv2Exp=7
+lv3Exp=15
+lv4Exp=120
+lv5Exp=365
+lv6Exp=999999999
+
+;越狱产生的保释金范围
+escapeFineMin=30000
+escapeFineMax=60000
+;假签到的触发概率，概率为 1/x (默认200000)
+fakeCheckinProb=200000
+
+;==== 打劫与越狱数值配置 ====
+;打劫目标必须在多少天内有群内发言记录
+attackInactiveDays=3
+;被警察抓住的基础罚款金额（受群倍率影响）
+attackBaseFine=500
+;打劫失败导致住院及对方获得赔偿的金币数目
+attackHospitalCost=10000
+;打劫蹲点没蹲到的跨城车费金额
+attackFailBusFare=200
+;越狱失败重伤的手术费用
+escapeHospitalCost=20000
+;打劫失败触发特殊事件（如住院、异世界等）的百分比概率
+attackFailedEventChance=4
+;群管理修改打劫倍率的冷却时间(秒)，默认3天=259200秒
+attackConfigCooldown=259200
+
+;==== 神秘力量系统配置 ====
+;打劫神秘人的基础成功率(%)
+mysticAttackSuccessRate=5
+;打劫神秘人成功的最低奖励
+mysticAttackRewardMin=150000
+;打劫神秘人成功的最高奖励
+mysticAttackRewardMax=400000
+;向神秘力量奉献的最低金币要求(监狱与禁闭室)
+mysticPrisonBribeMinAmount=20000
+;必能逃脱的奉献金币数(监狱与禁闭室)
+mysticPrisonBribeMaxAmount=80000
+;向神秘力量奉献的基础成功率(%, 监狱与禁闭室)
+mysticPrisonBribeBaseRate=20
+;向神秘力量奉献的最低金币要求(异世界、医院等其他异常状态)
+mysticOtherBribeMinAmount=20000
+;必能逃脱的奉献金币数(其他异常状态)
+mysticOtherBribeMaxAmount=100000
+;向神秘力量奉献的基础成功率(%, 其他异常状态)
+mysticOtherBribeBaseRate=5
+
+;==== OPcache 建议（写入 php.ini，不在此文件生效） ====
+;以下仅为推荐值示例，请按部署环境调整：
+;zend_extension=opcache
+;opcache.enable=1
+;opcache.enable_cli=0
+;opcache.memory_consumption=128
+;opcache.interned_strings_buffer=16
+;opcache.max_accelerated_files=20000
+;opcache.validate_timestamps=1
+;opcache.revalidate_freq=2
+;opcache.save_comments=1
+;opcache.fast_shutdown=1
+
+;==== 黑白名单配置 ====
+; 以下均使用半角逗号分隔多个QQ号或群号，例如 "111,222,333"
+
+;群聊名单模式，可选 none (关闭), blacklist (黑名单), whitelist (白名单)
+groupListMode=none
+groupListGroups=""
+
+;用户名单模式，可选 none (关闭), blacklist (黑名单), whitelist (白名单)
+userListMode=none
+userListUsers=""

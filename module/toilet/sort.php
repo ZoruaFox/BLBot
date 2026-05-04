@@ -65,15 +65,20 @@ $citiesMeta = json_decode(getData('toilet/citiesMeta.json'), true);
 setCache('toilet/'.time().'.bak', json_encode($toiletInfo));
 
 foreach($order as $city) {
-    if(!array_key_exists($city, $toiletInfo)) {
-        replyAndLeave('[Error] Cannot find city '.$city);
+    if(array_key_exists($city, $toiletInfo)) {
+        $newToiletInfo[$city] = $toiletInfo[$city];
+        if (isset($citiesMeta[$city])) {
+            $newCitiesMeta[$city] = $citiesMeta[$city];
+        }
+        unset($toiletInfo[$city]);
     }
-    $newToiletInfo[$city] = $toiletInfo[$city];
-    $newCitiesMeta[$city] = $citiesMeta[$city];
-    unset($toiletInfo[$city]);
 }
-if(count($toiletInfo)) {
-    replyAndLeave('[Error] Remaining cities: '.implode(', ', array_keys($toiletInfo)));
+// 追加在源数据中有但不在 MetroMan 排序列表里的其他城市（或者新抓取的城市）
+foreach($toiletInfo as $city => $data) {
+    $newToiletInfo[$city] = $data;
+    if (isset($citiesMeta[$city])) {
+        $newCitiesMeta[$city] = $citiesMeta[$city];
+    }
 }
 
 setData('toilet/toiletInfo.json', json_encode($newToiletInfo));

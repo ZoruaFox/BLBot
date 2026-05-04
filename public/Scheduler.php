@@ -19,11 +19,15 @@ class Scheduler {
         $this->setInterval();
         try {
             ($this->runner)($this->timestamp);
-        } catch (\Exception $e) {
+        } catch (\Throwable $e) {
             global $Queue;
             $time = date('Y/m/d H:i:s', $this->timestamp);
-            $trace = implode("\n", array_slice(explode("\n", $e), 0, 4));
-            $Queue[] = sendMaster("[{$time}] 执行 Scheduler {$this->name} 时发生错误：{$trace}\n...");
+            $trace = implode("\n", array_slice(explode("\n", (string)$e), 0, 4));
+            $errorMsg = "[{$time}] 执行 Scheduler {$this->name} 时发生异常：\n类型: " . get_class($e) . "\n信息: " . $e->getMessage() . "\n" . $trace . "\n...";
+            $Queue[] = sendMaster($errorMsg);
+            if (function_exists('sendDevGroup')) {
+                $Queue[] = sendDevGroup($errorMsg);
+            }
         }
     }
     public function __construct(string $name, bool $enabled, callable $validator, callable $runner, int $interval = -1) {

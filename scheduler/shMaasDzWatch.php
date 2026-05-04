@@ -33,7 +33,7 @@ $Schedulers[] = new BLBot\Scheduler(
                 ]),
             ],
         ]);
-        $lines = json_decode(file_get_contents('https://api.shmaas.net/traffic/cstmbus/line/list', false, $context), true);
+        $lines = json_decode(fetchHttp('https://api.shmaas.net/traffic/cstmbus/line/list', 5, ['http' => ['header' => $header]]), true);
         if ($lines['errMsg']) throw $lines['errMsg'];
         foreach ($lines['data']['lines'] as $line) {
             $lineInfo = "{$line['lineName']} {$line['lineNo']}";

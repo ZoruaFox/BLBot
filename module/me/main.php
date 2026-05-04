@@ -33,7 +33,11 @@ $level = getLvl($QQ);
 $status = getStatus($QQ);
 $statusEnd = getStatusEndTime($QQ);
 $credit = getCredit($QQ);
+$hasCreditAccount = creditAccountExists($QQ);
 $msg = "您的金币余额为 {$credit}，经验值为 {$exp}，等级为 Lv{$level} ～";
+if(!$hasCreditAccount) {
+    $msg .= "\n你还没有开通过金币账户，首次签到或发生金币变动后会自动创建～";
+}
 if($Event['user_id'] == $QQ) {
     if($level == 0) {
         $msg .= "\n签到后即可升级 Lv1 哦～";
@@ -43,6 +47,7 @@ if($Event['user_id'] == $QQ) {
         $msg .= "\n再签到 ".($nextLvl['exp'] - $exp)." 天即可升级 Lv{$nextLvl['lvl']}～";
     }
 }
+
 switch($status) {
     case 'imprisoned':
         $msg .= "\n当前身处监狱中，预计 {$statusEnd} 出狱";
@@ -69,11 +74,13 @@ switch($status) {
         $msg .= "\n你被外星人{$randomParts}了。";
         break;
     case 'free':
-        $lastCheckinTime = filemtime('../storage/data/checkin/'.$QQ);
-        if(intval(date('Ymd')) - intval(date('Ymd', $lastCheckinTime)) > 0) {
+        $lastCheckinTime = getCheckinLastTimestamp($QQ);
+        if($lastCheckinTime == 0 || intval(date('Ymd')) - intval(date('Ymd', $lastCheckinTime)) > 0) {
             $msg .= "\n今天还没有签到哦～";
         }
-    default: break;
+        break;
+    default:
+        break;
 }
 
 if($Event['user_id'] != $QQ) {
@@ -90,3 +97,4 @@ if($motto) {
 }
 
 $Queue[] = replyMessage($msg);
+

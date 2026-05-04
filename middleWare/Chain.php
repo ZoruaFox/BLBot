@@ -9,6 +9,7 @@ require('creeper.php');
 require('trash.php');
 require('toilet.php');
 require('checkin.php');
+require('fortune.php');
 require('rh.php');
 require('yancha.php');
 require('base64.php');
