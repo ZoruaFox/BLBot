@@ -17,6 +17,7 @@ require('calc.php');
 require('choose.php');
 require('v50.php');
 // require('song.php');
+require('weather.php');
 require('repeat.php');
 require('help.php');
 require('fakeCheckin.php');
