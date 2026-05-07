@@ -24,8 +24,8 @@ if(preg_match('/^alias(\.(check|clear|delete|del|set))?$/', $alias)) {
 if(!checkModule($command)) {
     replyAndLeave('原名指令 #'.$command.' 不存在…');
 }
-decCredit($Event['user_id'], 1800);
+decCredit($Event['user_id'], 20000);
 setAlias($Event['user_id'], $alias, $command);
-$Queue[] = replyMessage("设置 #{$alias} 为 #{$command} 的别名成功，已收取 1800 金币！\n注：别名仅对自己生效哦～");
+$Queue[] = replyMessage("设置 #{$alias} 为 #{$command} 的别名成功，已收取 20000 金币！\n注：别名仅对自己生效哦～");
 $Queue[] = sendMaster("{$Event['user_id']} 设置了 #{$alias} 作为 #{$command} 的别名");
 
