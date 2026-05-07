@@ -332,9 +332,9 @@ function normalizeAttackData($data): array {
 
 function mongoGetAttackData($user_id): ?array {
 		$doc = getMongoAttackCollection()->findOne(
-		['_id' => (string)$user_id],
-		getAttackMongoOptions(['projection' => ['status' => 1, 'end' => 1, 'count' => 1, 'escape' => 1]]),
-	);
+			['_id' => (string)$user_id],
+			getAttackMongoOptions(['projection' => ['status' => 1, 'end' => 1, 'count' => 1, 'mystic' => 1, 'escape' => 1]]),
+		);
 
 	if(!$doc || !is_array($doc)) {
 		return null;
@@ -353,6 +353,7 @@ function mongoSetAttackData($user_id, array $data): bool {
 				'status' => $data['status'],
 				'end' => $data['end'],
 				'count' => $data['count'],
+				'mystic' => $data['mystic'],
 				'escape' => $data['escape'],
 				'updated_at' => new \MongoDB\BSON\UTCDateTime(),
 			],
