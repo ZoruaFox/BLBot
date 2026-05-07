@@ -101,10 +101,25 @@ function attack($from, $target, $atTarget, $dreaming = false) {
 }
 
 function performFreeStatusAttack(&$data, $from, $target, $atTarget, $magnification) {
-	$data['count']['times'] += 1;
-
 	$isMaster = ($from == config('master'));
 	$targetIsMaster = ($target == config('master'));
+	$today = date('Ymd');
+
+	if($targetIsMaster) {
+		if(!isset($data['mystic']) || !is_array($data['mystic'])) {
+			$data['mystic'] = ['date' => $today, 'times' => 0];
+		} else if(($data['mystic']['date'] ?? '0') < $today) {
+			$data['mystic']['date'] = $today;
+			$data['mystic']['times'] = 0;
+		}
+
+		if(($data['mystic']['times'] ?? 0) >= 5) {
+			return '你今天对ta的打劫已达上限（5 次），请明天再来。';
+		}
+		$data['mystic']['times'] += 1;
+	}
+
+	$data['count']['times'] += 1;
 
 	if ($targetIsMaster) {
 		$successRate = (int)config('mysticAttackSuccessRate', 5);
@@ -265,6 +280,10 @@ function defaultAttackData(): array {
 			'date' => '0',
 			'times' => 0,
 		],
+		'mystic' => [
+			'date' => '0',
+			'times' => 0,
+		],
 		'escape' => [
 			'date' => '0',
 			'times' => 0,
@@ -286,6 +305,8 @@ function normalizeAttackData($data): array {
 
 		$count = $data['count'] ?? [];
 	if(!is_array($count)) $count = [];
+		$mystic = $data['mystic'] ?? [];
+		if(!is_array($mystic)) $mystic = [];
 	$escape = $data['escape'] ?? [];
 	if(!is_array($escape)) $escape = [];
 
@@ -295,6 +316,10 @@ function normalizeAttackData($data): array {
 		'count' => [
 			'date' => (string)($count['date'] ?? $default['count']['date']),
 			'times' => (int)($count['times'] ?? $default['count']['times']),
+		],
+		'mystic' => [
+			'date' => (string)($mystic['date'] ?? $default['mystic']['date']),
+			'times' => (int)($mystic['times'] ?? $default['mystic']['times']),
 		],
 		'escape' => [
 			'date' => (string)($escape['date'] ?? $default['escape']['date']),
@@ -379,9 +404,16 @@ function getAttackData($user_id) {
 		setAttackData($user_id, $data);
 	}
 
-	if($data['count']['date'] < date('Ymd')) {
-		$data['count']['date'] = date('Ymd');
+	$today = date('Ymd');
+	if($data['count']['date'] < $today) {
+		$data['count']['date'] = $today;
 		$data['count']['times'] = 0;
+		$data['mystic']['date'] = $today;
+		$data['mystic']['times'] = 0;
+		setAttackData($user_id, $data);
+	} else if(($data['mystic']['date'] ?? '0') < $today) {
+		$data['mystic']['date'] = $today;
+		$data['mystic']['times'] = 0;
 		setAttackData($user_id, $data);
 	}
 
