@@ -113,8 +113,8 @@ function performFreeStatusAttack(&$data, $from, $target, $atTarget, $magnificati
 			$data['mystic']['times'] = 0;
 		}
 
-		if(($data['mystic']['times'] ?? 0) >= 5) {
-			return '你今天对ta的打劫已达上限（5 次），请明天再来。';
+		if(($data['mystic']['times'] ?? 0) >= 3) {
+			return '你今天对ta的打劫已达上限（3 次），请明天再来。';
 		}
 		$data['mystic']['times'] += 1;
 	}
