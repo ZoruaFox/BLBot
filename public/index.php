@@ -89,10 +89,39 @@ try {
 
 try {
     //将队列中的消息发出
+    $queueCount = count($Queue);
+    $sentCount = 0;
+    $failCount = 0;
     foreach($Queue as $msg) {
         if($msg !== null) {
-            $MsgSender->send($msg);
+            $result = $MsgSender->send($msg);
+            if ($result !== null) {
+                $sentCount++;
+            } else {
+                $failCount++;
+                // 记录发送失败的详细信息到 error.log
+                $failInfo = sprintf(
+                    "[%s] Queue send FAIL: %s -> %s, msg: %s\n",
+                    date('Y-m-d H:i:s'),
+                    $msg->toGroup ? 'Group('.$msg->id.')' : 'Private('.$msg->id.')',
+                    $msg->async ? 'async' : 'sync',
+                    mb_substr(str_replace("\n", '\\n', $msg->msg), 0, 200)
+                );
+                @file_put_contents('../storage/data/error.log', $failInfo, FILE_APPEND);
+            }
         }
+    }
+
+    // 队列发送摘要日志
+    if ($failCount > 0 || $queueCount > 0) {
+        $summary = sprintf(
+            "[%s] Queue flush: %d total, %d sent, %d failed\n",
+            date('Y-m-d H:i:s'),
+            $queueCount,
+            $sentCount,
+            $failCount
+        );
+        @file_put_contents('../storage/data/error.log', $summary, FILE_APPEND);
     }
 } catch (\Throwable $e) {
     if($e->getCode() == -11) {

@@ -60,6 +60,12 @@ apcuDataCacheTtl=0
 DEBUG=false
 DebugListen=
 Listen=-1
+;==== 发送与 HTTP 调试日志 ====
+;是否启用 HTTP 调试日志（记录每次 CoolQ API 调用的请求/响应详情到 storage/data/http_debug.log）
+HTTP_DEBUG_LOG=false
+;是否启用发送结果日志（记录每条消息的发送结果到 storage/data/send_result.log）
+;注意：即使关闭此选项，发送失败的消息仍会记录到 storage/data/send_error.log 和 storage/data/error.log
+SEND_LOG=false
 ;是否开启一些功能
 alias=true
 

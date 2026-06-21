@@ -458,30 +458,84 @@ class CoolQ {
         $response = @file_get_contents($url, false, $context);
         $last_error = error_get_last();
         
-        // 增加调试记录机制，写入到 storage/data 方便排错
-        // 屏蔽过大日志
-        // $log_file = dirname(__DIR__, 1) . '/storage/data/http_debug.log';
-        // $log_data = sprintf(
-        //     "[%s] API: %s\nPayload: %s\nResponse: %s\nError: %s\nHeaders: %s\n---\n",
-        //     date('Y-m-d H:i:s'),
-        //     $url,
-        //     $json_payload,
-        //     var_export($response, true),
-        //     var_export($last_error, true),
-        //     var_export($http_response_header ?? null, true)
-        // );
-        // @file_put_contents($log_file, $log_data, FILE_APPEND);
+        // HTTP 调试日志：记录每次 API 调用的请求与响应
+        $httpDebugEnabled = $this->isHttpDebugEnabled();
+        if ($httpDebugEnabled) {
+            $log_dir = dirname(__DIR__, 1) . '/storage/data';
+            $log_file = $log_dir . '/http_debug.log';
+            $log_data = sprintf(
+                "[%s] API: %s\nPayload: %s\nResponse: %s\nError: %s\nHeaders: %s\n---\n",
+                date('Y-m-d H:i:s'),
+                $url,
+                $json_payload,
+                var_export($response, true),
+                var_export($last_error, true),
+                var_export($http_response_header ?? null, true)
+            );
+            @file_put_contents($log_file, $log_data, FILE_APPEND);
+        }
 
         $result = json_decode($response);
-        if (!$result || !isset($result->retcode)) return null;
+        if (!$result || !isset($result->retcode)) {
+            // 记录 HTTP 响应异常（非正常 JSON 或缺少 retcode）
+            $this->logSendError($api, $param, $response, $last_error);
+            return null;
+        }
 
         switch($result->retcode) {
             case 0:
                 return $result->data;
             case 1:
+                // 异步发送失败，记录
+                $this->logSendError($api, $param, $response, null, $result->retcode);
                 return null;
             default:
+                // 未预期的 retcode，记录
+                $this->logSendError($api, $param, $response, null, $result->retcode);
+                return null;
         }
+    }
+
+    /**
+     * 记录消息发送失败的错误日志
+     */
+    private function logSendError($api, $param, $response, $last_error = null, $retcode = null) {
+        $log_dir = dirname(__DIR__, 1) . '/storage/data';
+        $log_file = $log_dir . '/send_error.log';
+        $log_data = sprintf(
+            "[%s] API: %s\nParam: %s\nResponse: %s\nError: %s\nRetcode: %s\n---\n",
+            date('Y-m-d H:i:s'),
+            $api,
+            json_encode($param, JSON_UNESCAPED_UNICODE),
+            var_export($response, true),
+            $last_error ? $last_error['message'] ?? var_export($last_error, true) : 'N/A',
+            $retcode ?? 'N/A'
+        );
+        @file_put_contents($log_file, $log_data, FILE_APPEND);
+    }
+
+    /**
+     * 检查是否启用 HTTP 调试日志（通过 config.ini 的 HTTP_DEBUG_LOG 配置）
+     */
+    private function isHttpDebugEnabled(): bool {
+        static $enabled = null;
+        if ($enabled !== null) return $enabled;
+
+        $configFile = dirname(__DIR__, 1) . '/config.ini';
+        if (!file_exists($configFile)) {
+            $enabled = false;
+            return false;
+        }
+
+        $config = @parse_ini_file($configFile, false);
+        if (!$config || !isset($config['HTTP_DEBUG_LOG'])) {
+            $enabled = false;
+            return false;
+        }
+
+        $val = strtolower(trim((string)$config['HTTP_DEBUG_LOG']));
+        $enabled = in_array($val, ['1', 'true', 'yes', 'on'], true);
+        return $enabled;
     }
 
 }
