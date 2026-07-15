@@ -1,11 +1,11 @@
 <?php
 
-global $Message, $Event;
+global $Message, $Event, $CQ;
 use Overtrue\Pinyin\Pinyin;
 
-loadModule('randomBan.tools');
 if($Message == '严查' || Pinyin::fullSentence($Message, 'none')->join(' ') == 'yan cha'){
-	if(!rand(0, 2) && randomBan(5)){
+	if(!rand(0, 2)){
+		$CQ->setGroupBan($Event['group_id'], $Event['user_id'], 5);
 		replyAndLeave(str_replace('查', mb_substr($Message, 1, 1), '好查！多查！'));
 	}
 	if(!function_exists('randomChoose')){
