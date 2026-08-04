@@ -1,9 +1,8 @@
 <?php
 
 global $Message;
-use Overtrue\Pinyin\Pinyin;
 
-if(strtolower($Message) == 'qd' || Pinyin::abbr($Message)->join('') == 'qd'){
+if(strtolower($Message) == 'qd' || $Message == '签到'){
 	loadModule('checkin');
 	leave();
 }
